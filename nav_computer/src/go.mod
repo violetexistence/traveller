@@ -3,6 +3,7 @@ module nav_computer
 go 1.22.4
 
 require (
+	github.com/charmbracelet/bubbletea v0.26.4
 	github.com/charmbracelet/huh v0.4.2
 	github.com/charmbracelet/huh/spinner v0.0.0-20240618200428-90406d79077d
 )
