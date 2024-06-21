@@ -27,6 +27,13 @@ type Hours struct {
 	At2G float64
 }
 
+type Jump struct {
+	SpectralClass string
+	Diameter string
+	Type string
+	TravelTime float64
+}
+
 var masking_table = map[string]Masking {
 	"O5":				{ Free: auto,	Throw: 0,		Time: Hours { At05G: 336,			At1G: 240,		At2G: 168,		} },
 	"B0": 			{ Free: auto,	Throw: 0,		Time: Hours { At05G: 216,			At1G: 151,		At2G: 108,		} },
@@ -86,7 +93,11 @@ var (
 	destination_spectral_class string
 	destination_diameter string
 	g_rating float64
-	total_travel_time float64
+)
+
+var (
+	outjump_plan Jump
+	breakout_plan Jump
 )
 
 func main() {	
@@ -204,64 +215,64 @@ func main() {
 
 	err = spinner.New().
 		Title("Calculating travel time...").
-		Action(compute_total_travel_time).
+		Action(create_plan).
 		Run()
 
-	fmt.Printf("Est. Travel Time: %v (hours)", total_travel_time)
-}
-
-func compute_total_travel_time() {
-	origin_to_jump := compute_time_to_jump_point(origin_spectral_class, origin_diameter, g_rating)
-	jump_to_destination := compute_time_to_jump_point(destination_spectral_class, destination_diameter, g_rating)
-	
-	average_time_in_jump_space := 168.0
-	jump_space_factor := float64(rand.Intn(11)) / 100.0
-	coin := throw(1)
-	if coin < 4 {
-		jump_space_factor *= -1.0
+	if err != nil {
+		log.Fatal(err)
 	}
-	jump_space_variance := 100.0 + jump_space_factor
-	actual_time_in_jump_space := jump_space_variance + average_time_in_jump_space
 
-	total_travel_time = origin_to_jump + actual_time_in_jump_space + jump_to_destination
+	total_travel_time := outjump_plan.TravelTime + 168.0 + breakout_plan.TravelTime
+
+	fmt.Printf("\nOutjump: %s, %.2f (hours)\n", outjump_plan.Type, outjump_plan.TravelTime)
+	fmt.Printf("Breakout: %s, %.2f (hours)\n", breakout_plan.Type, breakout_plan.TravelTime)
+	fmt.Printf("Total Travel Time Est. %.2f (hours)\n", total_travel_time)
 }
 
-func compute_time_to_jump_point(spectral_class string, world_diameter string, acceleration float64) float64 {
+func create_plan() {
+	outjump_plan = compute_jump(origin_spectral_class, origin_diameter, g_rating)
+	breakout_plan = compute_jump(destination_spectral_class, destination_diameter, g_rating)	
+}
+
+func compute_jump(spectral_class string, world_diameter string, acceleration float64) Jump {
+	jump := Jump {
+		SpectralClass: spectral_class,
+		Diameter: world_diameter,
+	}
 	masking_row := masking_table[spectral_class]
-	var is_free bool
-	var hours float64
 	
 	switch masking_row.Free {
 	case auto:
-		is_free = true
+		jump.Type = "Free"
 		free_jump_row := free_jump_table[world_diameter]
-		hours = get_time(free_jump_row, acceleration)
+		jump.TravelTime = choose_hours(free_jump_row, acceleration)
 	case roll:
-		is_free = throw(3) >= masking_row.Throw
-		if is_free {
+		if dice(3) >= masking_row.Throw {
+			jump.Type = "Free"
 			free_jump_row := free_jump_table[world_diameter]
-			hours = get_time(free_jump_row, acceleration)
+			jump.TravelTime = choose_hours(free_jump_row, acceleration)
 		} else {
-			factor := time_factor_table_1[throw(1)]
-			hours = factor * get_time(masking_row.Time, acceleration)
+			jump.Type = "Masked"
+			factor := time_factor_table_1[dice(1)]
+			jump.TravelTime = factor * choose_hours(masking_row.Time, acceleration)
 		}
 	case no:
-		is_free = false
-		is_near_side := throw(1) < 4
+		jump.Type = "Masked"
+		is_near_side := dice(1) < 4
 		primary_factor := time_factor_table_2[spectral_class]
-		world_factor := time_factor_table_1[throw(1)]
+		world_factor := time_factor_table_1[dice(1)]
 		
 		if is_near_side {
-			hours = primary_factor * get_time(masking_row.Time, acceleration)
+			jump.TravelTime = primary_factor * choose_hours(masking_row.Time, acceleration)
 		} else {
-			hours = math.Max(primary_factor, world_factor) * get_time(masking_row.Time, acceleration)
+			jump.TravelTime = math.Max(primary_factor, world_factor) * choose_hours(masking_row.Time, acceleration)
 		}
 	}
 
-	return hours	
+	return jump	
 }
 
-func throw(num int) int {
+func dice(num int) int {
 	sum := 0
 	for i := 0; i < num; i++ {
 		sum += (rand.Intn(6) + 1)
@@ -269,7 +280,7 @@ func throw(num int) int {
 	return sum
 }
 
-func get_time(hours Hours, acceleration float64) float64 {
+func choose_hours(hours Hours, acceleration float64) float64 {
 	switch acceleration {
 	case 0.5:
 		return hours.At05G
