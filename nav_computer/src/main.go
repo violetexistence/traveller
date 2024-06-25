@@ -2,84 +2,61 @@ package main
 
 import (
 	"fmt"
+	"nav_computer/flight"
+	"nav_computer/menu"
 	"os"
-	
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-type model struct {
-	choices []string
-	cursor int
-	selected map[int]struct{}
+type Model struct {
+	app      menu.Application
+	appModel tea.Model
 }
 
-func initialModel() model {
-	return model {
-		choices: []string{"Buy carrots", "Buy celery", "Buy shallots"},
-		selected: make(map[int]struct{}),
+func New() tea.Model {
+	return Model{
+		app:      menu.MainMenu,
+		appModel: menu.New(),
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-			case "ctrl+c", "q":
-				return m, tea.Quit
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		}
+	case menu.ChooseApp:
+		m.app = msg.App
 
-			case "up", "k":
-				if m.cursor > 0 {
-					m.cursor--
-				}
-
-			case "down", "j":
-				if m.cursor < len(m.choices)-1 {
-					m.cursor++
-				}
-
-			case "enter", " ":
-				_, ok := m.selected[m.cursor]
-				if ok {
-					delete(m.selected, m.cursor)
-				} else {
-					m.selected[m.cursor] = struct{}{}
-				}
+		switch m.app {
+		case menu.FlightPlan:
+			m.appModel = flight.New()
+		case menu.ExitMenu:
+			return m, tea.Quit
 		}
 	}
 
-	return m, nil
+	var cmd tea.Cmd
+	m.appModel, cmd = m.appModel.Update(msg)
+
+	return m, cmd
 }
 
-func (m model) View() string {
-	s := "What should we buy at the market?\n\n"
-
-	for i, choice := range m.choices {
-		cursor := " "
-		if m.cursor == i {
-			cursor = ">"
-		}
-
-		checked := " "
-		if _, ok := m.selected[i]; ok {
-			checked = "x"
-		}
-
-		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
-	}
-
-	s += "\nPress q to quit.\n"
-
-	return s
+func (m Model) View() string {
+	return m.appModel.View()
 }
 
 func main() {
-	p := tea.NewProgram(initialModel())
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
+	_, err := tea.NewProgram(New(), tea.WithAltScreen()).Run()
+	if err != nil {
+		fmt.Println("Oh no:", err)
 		os.Exit(1)
 	}
 }
