@@ -20,6 +20,14 @@ type ChooseApp struct {
 	App Application
 }
 
+func Open(app Application) tea.Cmd {
+	return func() tea.Msg {
+		return ChooseApp{
+			App: app,
+		}
+	}
+}
+
 type Item struct {
 	title, desc string
 	app         Application
@@ -31,11 +39,10 @@ func (i Item) FilterValue() string { return i.title }
 
 type Model struct {
 	list list.Model
+	lip  lipgloss.Style
 }
 
-var menuStyle = lipgloss.NewStyle().Margin(1, 2)
-
-func New() tea.Model {
+func New(lip lipgloss.Style, height int, width int) tea.Model {
 	items := []list.Item{
 		Item{
 			title: "Flight Plans",
@@ -57,9 +64,18 @@ func New() tea.Model {
 	list := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	list.Title = "Main Menu"
 
-	return Model{
+	m := Model{
 		list: list,
+		lip:  lip,
 	}
+	m.Resize(height, width)
+
+	return m
+}
+
+func (m *Model) Resize(height int, width int) {
+	h, w := m.lip.GetFrameSize()
+	m.list.SetSize(width-w, height-h)
 }
 
 func (m Model) Init() tea.Cmd {
@@ -71,14 +87,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			return m, tea.Quit
+			return m, Open(ExitMenu)
 		case "enter":
 			app := m.list.SelectedItem().(Item).app
 			cmd := func() tea.Msg { return ChooseApp{App: app} }
 			return m, cmd
 		}
 	case tea.WindowSizeMsg:
-		h, w := menuStyle.GetFrameSize()
+		h, w := m.lip.GetFrameSize()
 		m.list.SetSize(msg.Width-w, msg.Height-h)
 	}
 
@@ -89,5 +105,5 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return menuStyle.Render(m.list.View())
+	return m.lip.Render(m.list.View())
 }
