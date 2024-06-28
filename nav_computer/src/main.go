@@ -2,18 +2,20 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"nav_computer/flight"
 	"nav_computer/menu"
 	"os"
+	"reflect"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type Model struct {
-	app      menu.Application
-	appModel tea.Model
 	lip      lipgloss.Style
+	appModel tea.Model
+	app      menu.Application
 	height   int
 	width    int
 }
@@ -33,6 +35,8 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	log.Printf("Received: %v", reflect.TypeOf(msg))
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
@@ -61,6 +65,13 @@ func (m Model) View() string {
 }
 
 func main() {
+	logfilePath := os.Getenv("BUBBLETEA_LOG")
+	if logfilePath != "" {
+		if _, err := tea.LogToFile(logfilePath, "simple"); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	_, err := tea.NewProgram(New(), tea.WithAltScreen()).Run()
 	if err != nil {
 		fmt.Println("Oh no:", err)
