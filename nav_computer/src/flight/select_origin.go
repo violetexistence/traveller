@@ -28,12 +28,27 @@ func (m SelectOriginModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
-			m.selectedOrigin = m.list.SelectedItem().(WorldItem)
-			cmds = append(cmds, selectWorld(m.selectedOrigin))
+			selectedItem, isVisible := getVisibleSelection(m)
+			if isVisible {
+				cmds = append(cmds, selectWorld(selectedItem))
+			}
 		}
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func getVisibleSelection(m SelectOriginModel) (WorldItem, bool) {
+	selectedItem := m.list.SelectedItem().(list.Item)
+	isVisible := false
+
+	for _, visibleItem := range m.list.VisibleItems() {
+		if visibleItem == selectedItem {
+			isVisible = true
+		}
+	}
+
+	return selectedItem.(WorldItem), isVisible
 }
 
 func (m SelectOriginModel) View() string {

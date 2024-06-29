@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type OriginSearchModel struct {
@@ -39,6 +40,7 @@ func (m OriginSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.searching {
+		log.Println("dispatching to spinner")
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
@@ -56,7 +58,7 @@ func (m OriginSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.query = m.form.GetString("origin")
 		m.searching = true
 		cmd := searchForWorld(m.query)
-		cmds = append(cmds, cmd)
+		cmds = append(cmds, m.spinner.Tick, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -82,6 +84,9 @@ func NewOriginSearch(m CreatePlanModel) tea.Model {
 		query:   m.originQuery,
 		spinner: spinner.New(),
 	}
+
+	model.spinner.Spinner = spinner.Dot
+	model.spinner.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	model.form = *huh.NewForm(
 		huh.NewGroup(

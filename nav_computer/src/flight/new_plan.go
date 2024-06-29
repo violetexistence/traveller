@@ -1,6 +1,8 @@
 package flight
 
 import (
+	"log"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -42,7 +44,10 @@ func (m CreatePlanModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
-			return m, func() tea.Msg { return ListAllMsg{} }
+			if m.currentStepId == 0 {
+				return m, func() tea.Msg { return ListAllMsg{} }
+			}
+			return m, transition(PreviousMsg)
 		}
 	case TransitionMsg:
 		switch msg {
@@ -88,8 +93,13 @@ func (m CreatePlanModel) Abort(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m CreatePlanModel) Next(msg tea.Msg) (tea.Model, tea.Cmd) {
-	m.currentStepId++
-	m.currentStep = m.steps[m.currentStepId](m)
+	if nextStepCreator, ok := m.steps[m.currentStepId+1]; ok {
+		m.currentStepId++
+		m.currentStep = nextStepCreator(m)
+	} else {
+		log.Printf("Next step is not defined: %d", m.currentStepId+1)
+	}
+
 	return m, nil
 }
 
