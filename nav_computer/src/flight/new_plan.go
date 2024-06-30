@@ -1,22 +1,23 @@
 package flight
 
 import (
-	"log"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type CreatePlanModel struct {
-	lip                lipgloss.Style
-	height             int
-	width              int
-	steps              map[stepId]StepCreator
-	currentStepId      stepId
-	currentStep        tea.Model
-	originQuery        string
-	originQueryResults SearchResults
-	originWorld        WorldItem
+	lip                     lipgloss.Style
+	height                  int
+	width                   int
+	steps                   map[stepId]StepCreator
+	currentStepId           stepId
+	currentStep             tea.Model
+	originQuery             string
+	originQueryResults      SearchResults
+	originWorld             WorldItem
+	destinationQuery        string
+	destinationQueryResults SearchResults
+	destinationWorld        WorldItem
 }
 
 func NewCreatePlan(lip lipgloss.Style, height int, width int) tea.Model {
@@ -25,10 +26,10 @@ func NewCreatePlan(lip lipgloss.Style, height int, width int) tea.Model {
 		height:        height,
 		width:         width,
 		steps:         createSteps(),
-		currentStepId: originSearchStep,
+		currentStepId: chooseOriginStep,
 	}
 
-	m.currentStep = m.steps[originSearchStep](m)
+	m.currentStep = m.steps[chooseOriginStep](m)
 
 	return m
 }
@@ -41,31 +42,24 @@ func (m CreatePlanModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc:
-			if m.currentStepId == 0 {
-				return m, func() tea.Msg { return ListAllMsg{} }
-			}
-			return m, transition(PreviousMsg)
-		}
 	case TransitionMsg:
 		switch msg {
 		case PreviousMsg:
-			return m.Prev(msg)
+			return m.Prev()
 		case NextMsg:
-			return m.Next(msg)
+			return m.Next()
 		case FinishMsg:
-			return m.Finish(msg)
+			return m.Finish()
 		case AbortMsg:
-			return m.Abort(msg)
+			return m.Abort()
 		}
-	case OriginSearchResultsMsg:
-		m.originQuery = msg.query
-		m.originQueryResults = msg.results
-		return m, transition(NextMsg)
-	case OriginWorldSelectedMsg:
-		m.originWorld = msg.world
+	case WorldSelectedMsg:
+		if m.currentStepId == chooseOriginStep {
+			m.originWorld = msg.world
+		}
+		if m.currentStepId == chooseDestinationStep {
+			m.destinationWorld = msg.world
+		}
 		return m, transition(NextMsg)
 	}
 
@@ -80,32 +74,35 @@ func (m CreatePlanModel) View() string {
 	return m.currentStep.View()
 }
 
-func (m CreatePlanModel) Finish(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m CreatePlanModel) Finish() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		return InsertPlanMsg{}
 	}
 }
 
-func (m CreatePlanModel) Abort(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m CreatePlanModel) Abort() (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		return ListAllMsg{}
 	}
 }
 
-func (m CreatePlanModel) Next(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m CreatePlanModel) Next() (tea.Model, tea.Cmd) {
 	if nextStepCreator, ok := m.steps[m.currentStepId+1]; ok {
 		m.currentStepId++
 		m.currentStep = nextStepCreator(m)
-	} else {
-		log.Printf("Next step is not defined: %d", m.currentStepId+1)
 	}
 
 	return m, nil
 }
 
-func (m CreatePlanModel) Prev(msg tea.Msg) (tea.Model, tea.Cmd) {
-	m.currentStepId--
-	m.currentStep = m.steps[m.currentStepId](m)
+func (m CreatePlanModel) Prev() (tea.Model, tea.Cmd) {
+	if stepCreator, ok := m.steps[m.currentStepId-1]; ok {
+		m.currentStepId--
+		m.currentStep = stepCreator(m)
+	} else {
+		return m.Abort()
+	}
+
 	return m, nil
 }
 
@@ -130,10 +127,8 @@ func transition(msg TransitionMsg) tea.Cmd {
 type stepId uint
 
 const (
-	originSearchStep stepId = iota
-	selectOriginStep
-	destSearchStep
-	selectDestStep
+	chooseOriginStep stepId = iota
+	chooseDestinationStep
 	shipDetailStep
 	finishStep
 )
@@ -142,8 +137,14 @@ type StepCreator func(m CreatePlanModel) tea.Model
 
 func createSteps() map[stepId]StepCreator {
 	return map[stepId]StepCreator{
-		originSearchStep: NewOriginSearch,
-		selectOriginStep: NewSelectOrigin,
+		chooseOriginStep:      createNewWorldSeach("Origin"),
+		chooseDestinationStep: createNewWorldSeach("Destination"),
+	}
+}
+
+func createNewWorldSeach(title string) StepCreator {
+	return func(model CreatePlanModel) tea.Model {
+		return NewWorldSearch(model, title)
 	}
 }
 
