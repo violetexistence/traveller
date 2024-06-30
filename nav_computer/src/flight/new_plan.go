@@ -87,17 +87,30 @@ func (m CreatePlanModel) Abort() (tea.Model, tea.Cmd) {
 }
 
 func (m CreatePlanModel) Next() (tea.Model, tea.Cmd) {
-	if nextStepCreator, ok := m.steps[m.currentStepId+1]; ok {
-		m.currentStepId++
-		m.currentStep = nextStepCreator(m)
+	nextStepId := m.currentStepId + 1
+	if nextStep, ok := savedSteps[nextStepId]; ok {
+		savedSteps[m.currentStepId] = m.currentStep
+		m.currentStepId = nextStepId
+		m.currentStep = nextStep
+	} else if nextStepCreator, ok := m.steps[nextStepId]; ok {
+		savedSteps[m.currentStepId] = m.currentStep
+		m.currentStepId = nextStepId
+		nextStep := nextStepCreator(m)
+		m.currentStep = nextStep
 	}
 
 	return m, nil
 }
 
 func (m CreatePlanModel) Prev() (tea.Model, tea.Cmd) {
-	if stepCreator, ok := m.steps[m.currentStepId-1]; ok {
-		m.currentStepId--
+	prevStepId := m.currentStepId - 1
+	if prevStep, ok := savedSteps[prevStepId]; ok {
+		savedSteps[m.currentStepId] = m.currentStep
+		m.currentStepId = prevStepId
+		m.currentStep = prevStep
+	} else if stepCreator, ok := m.steps[prevStepId]; ok {
+		savedSteps[m.currentStepId] = m.currentStep
+		m.currentStepId = prevStepId
 		m.currentStep = stepCreator(m)
 	} else {
 		return m.Abort()
@@ -141,6 +154,8 @@ func createSteps() map[stepId]StepCreator {
 		chooseDestinationStep: createNewWorldSeach("Destination"),
 	}
 }
+
+var savedSteps = make(map[stepId]tea.Model)
 
 func createNewWorldSeach(title string) StepCreator {
 	return func(model CreatePlanModel) tea.Model {

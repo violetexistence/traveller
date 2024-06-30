@@ -123,17 +123,14 @@ func (m WorldSearchModel) View() string {
 
 func (m WorldSearchModel) inputView() string {
 	var sb strings.Builder
-	title := lipgloss.NewStyle().Bold(true).Foreground(Indigo).Render(m.title)
-	description := "Main world name"
-	help := lipgloss.NewStyle().Foreground(Subdued).Render("enter - search, esc - go back")
 
-	sb.WriteString(title)
+	sb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(Indigo).Render(m.title))
 	sb.WriteString("\n")
-	sb.WriteString(description)
+	sb.WriteString("Main world name")
 	sb.WriteString("\n\n")
 	sb.WriteString(m.input.View())
 	sb.WriteString("\n\n")
-	sb.WriteString(help)
+	sb.WriteString(lipgloss.NewStyle().Foreground(Subdued).Render("enter - search, esc - go back"))
 
 	return sb.String()
 }
