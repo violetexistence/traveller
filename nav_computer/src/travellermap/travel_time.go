@@ -1,10 +1,13 @@
-package main
+package travellermap
 
 import (
 	"fmt"
 	"log"
 	"math"
 	"math/rand"
+	"strconv"
+	"time"
+
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/huh/spinner"
 )
@@ -15,61 +18,82 @@ const (
 	no
 )
 
+const (
+	AverageJumpTime = 168 * time.Hour
+)
+
 type Masking struct {
-	Free int
+	Free  int
 	Throw int
-	Time Hours
+	Time  Hours
 }
 
 type Hours struct {
 	At05G float64
-	At1G float64
-	At2G float64
+	At1G  float64
+	At2G  float64
 }
 
-type Jump struct {
+type JumpParams struct {
 	SpectralClass string
-	Diameter string
-	Type string
-	TravelTime float64
+	Diameter      string
+	Type          string
+	TravelTime    float64
 }
 
-var masking_table = map[string]Masking {
-	"O5":				{ Free: auto,	Throw: 0,		Time: Hours { At05G: 336,			At1G: 240,		At2G: 168,		} },
-	"B0": 			{ Free: auto,	Throw: 0,		Time: Hours { At05G: 216,			At1G: 151,		At2G: 108,		} },
-	"B5": 			{ Free: auto,	Throw: 0,		Time: Hours { At05G: 153.6,		At1G: 108,		At2G: 76.8,		} },
-	"A0": 			{ Free: roll,	Throw: 17,	Time: Hours { At05G: 124.8,		At1G: 89,			At2G: 62.4,		} },
-	"A5": 			{ Free: roll,	Throw: 16,	Time: Hours { At05G: 103.2,		At1G: 72,			At2G: 50.4,		} },
-	"F0": 			{ Free: roll,	Throw: 15, 	Time: Hours { At05G: 91.2,		At1G: 64.8,		At2G: 45,			} },
-	"F5": 			{ Free: roll,	Throw: 14, 	Time: Hours { At05G: 86.4,		At1G: 62.4,		At2G: 43,			} },
-	"G0": 			{ Free: roll,	Throw: 12, 	Time: Hours { At05G: 81.6,		At1G: 57.6,		At2G: 40,			} },
-	"G5": 			{ Free: no,		Throw: 0,		Time: Hours { At05G: 76.8,		At1G: 52.8,		At2G: 38,			} },
-	"K0": 			{ Free: no,		Throw: 0, 	Time: Hours { At05G: 72,			At1G: 50.4,		At2G: 36,			} },
-	"K5": 			{ Free: no,		Throw: 0, 	Time: Hours { At05G: 67.2,		At1G: 48,			At2G: 34,			} },
-	"M0": 			{ Free: no,		Throw: 0, 	Time: Hours { At05G: 62.4,		At1G: 44,			At2G: 31,			} },
-	"M5": 			{ Free: no,		Throw: 0, 	Time: Hours { At05G: 45,			At1G: 32,			At2G: 22,			} },
-	"M9": 			{ Free: no,		Throw: 0, 	Time: Hours { At05G: 29,			At1G: 20,			At2G: 14,			} },
-	"Unknown":	{ Free: roll,	Throw: 8,		Time: Hours { At05G: 62.4,		At1G: 44,			At2G: 31,			} },
+var masking_table = map[string]Masking{
+	"O5":      {Free: auto, Throw: 0, Time: Hours{At05G: 336, At1G: 240, At2G: 168}},
+	"B0":      {Free: auto, Throw: 0, Time: Hours{At05G: 216, At1G: 151, At2G: 108}},
+	"B5":      {Free: auto, Throw: 0, Time: Hours{At05G: 153.6, At1G: 108, At2G: 76.8}},
+	"A0":      {Free: roll, Throw: 17, Time: Hours{At05G: 124.8, At1G: 89, At2G: 62.4}},
+	"A5":      {Free: roll, Throw: 16, Time: Hours{At05G: 103.2, At1G: 72, At2G: 50.4}},
+	"F0":      {Free: roll, Throw: 15, Time: Hours{At05G: 91.2, At1G: 64.8, At2G: 45}},
+	"F5":      {Free: roll, Throw: 14, Time: Hours{At05G: 86.4, At1G: 62.4, At2G: 43}},
+	"G0":      {Free: roll, Throw: 12, Time: Hours{At05G: 81.6, At1G: 57.6, At2G: 40}},
+	"G5":      {Free: no, Throw: 0, Time: Hours{At05G: 76.8, At1G: 52.8, At2G: 38}},
+	"K0":      {Free: no, Throw: 0, Time: Hours{At05G: 72, At1G: 50.4, At2G: 36}},
+	"K5":      {Free: no, Throw: 0, Time: Hours{At05G: 67.2, At1G: 48, At2G: 34}},
+	"M0":      {Free: no, Throw: 0, Time: Hours{At05G: 62.4, At1G: 44, At2G: 31}},
+	"M5":      {Free: no, Throw: 0, Time: Hours{At05G: 45, At1G: 32, At2G: 22}},
+	"M9":      {Free: no, Throw: 0, Time: Hours{At05G: 29, At1G: 20, At2G: 14}},
+	"Unknown": {Free: roll, Throw: 8, Time: Hours{At05G: 62.4, At1G: 44, At2G: 31}},
 }
 
-var free_jump_table = map[string]Hours {
-	"Asteroid":					{ At05G: 0.9,		At1G: 0.7,	At2G: 0.5,	},
-	"1,000 miles":			{ At05G: 2.7,		At1G: 1.9,	At2G: 1.3,	},
-	"2,000 miles":			{ At05G: 3.8,		At1G: 2.7,	At2G: 1.9,	},
-	"3,000 miles":			{ At05G: 4.6,		At1G: 3.3,	At2G: 2.3,	},
-	"4,000 miles":			{ At05G: 5.4,		At1G: 3.8,	At2G: 2.7,	},
-	"5,000 miles":			{ At05G: 6.0,		At1G: 4.2,	At2G: 3.0,	},
-	"6,000 miles":			{ At05G: 6.6,		At1G: 4.6,	At2G: 3.3,	},
-	"7,000 miles":			{ At05G: 7.1,		At1G: 5.0,	At2G: 3.5,	},
-	"8,000 miles":			{ At05G: 7.6,		At1G: 5.4,	At2G: 3.8,	},
-	"9,000 miles":			{ At05G: 8.0,		At1G: 5.7,	At2G: 4.0,	},
-	"10,000 miles":			{ At05G: 8.5,		At1G: 6.0,	At2G: 4.2,	},
-	"Small Gas Giant":	{ At05G: 14.7,	At1G: 10.4,	At2G: 7.3,	},
-	"Medium Gas Giant":	{ At05G: 19.0,	At1G: 13.4,	At2G: 9.5,	},
-	"Large Gas Giant":	{ At05G: 24.0,	At1G: 17.0,	At2G: 12.0,	},
+var free_jump_table = map[string]Hours{
+	"Asteroid":         {At05G: 0.9, At1G: 0.7, At2G: 0.5},
+	"1,000 miles":      {At05G: 2.7, At1G: 1.9, At2G: 1.3},
+	"2,000 miles":      {At05G: 3.8, At1G: 2.7, At2G: 1.9},
+	"3,000 miles":      {At05G: 4.6, At1G: 3.3, At2G: 2.3},
+	"4,000 miles":      {At05G: 5.4, At1G: 3.8, At2G: 2.7},
+	"5,000 miles":      {At05G: 6.0, At1G: 4.2, At2G: 3.0},
+	"6,000 miles":      {At05G: 6.6, At1G: 4.6, At2G: 3.3},
+	"7,000 miles":      {At05G: 7.1, At1G: 5.0, At2G: 3.5},
+	"8,000 miles":      {At05G: 7.6, At1G: 5.4, At2G: 3.8},
+	"9,000 miles":      {At05G: 8.0, At1G: 5.7, At2G: 4.0},
+	"10,000 miles":     {At05G: 8.5, At1G: 6.0, At2G: 4.2},
+	"Small Gas Giant":  {At05G: 14.7, At1G: 10.4, At2G: 7.3},
+	"Medium Gas Giant": {At05G: 19.0, At1G: 13.4, At2G: 9.5},
+	"Large Gas Giant":  {At05G: 24.0, At1G: 17.0, At2G: 12.0},
 }
 
-var time_factor_table_1 = map[int]float64 {
+var planetary_diameter_map = map[int]string{
+	600:    "Asteroid",
+	1000:   "1,000 miles",
+	2000:   "2,000 miles",
+	3000:   "3,000 miles",
+	4000:   "4,000 miles",
+	5000:   "5,000 miles",
+	6000:   "6,000 miles",
+	7000:   "7,000 miles",
+	8000:   "8,000 miles",
+	9000:   "9,000 miles",
+	10000:  "10,000 miles",
+	20000:  "Small Gas Giant",
+	90000:  "Medium Gas Giant",
+	140000: "Large Gas Giant",
+}
+
+var time_factor_table_1 = map[int]float64{
 	1: 0.2,
 	2: 0.4,
 	3: 0.6,
@@ -78,7 +102,7 @@ var time_factor_table_1 = map[int]float64 {
 	6: 1.0,
 }
 
-var time_factor_table_2 = map[string]float64 {
+var time_factor_table_2 = map[string]float64{
 	"G5": 0.4,
 	"K0": 0.5,
 	"K5": 0.8,
@@ -88,19 +112,19 @@ var time_factor_table_2 = map[string]float64 {
 }
 
 var (
-	origin_spectral_class string
-	origin_diameter string
+	origin_spectral_class      string
+	origin_diameter            string
 	destination_spectral_class string
-	destination_diameter string
-	g_rating float64
+	destination_diameter       string
+	g_rating                   float64
 )
 
 var (
-	outjump_plan Jump
-	breakout_plan Jump
+	outjump_plan  JumpParams
+	breakout_plan JumpParams
 )
 
-func mainx() {	
+func mainx() {
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -123,7 +147,6 @@ func mainx() {
 					huh.NewOption("Unknown", "Unknown"),
 				).
 				Value(&origin_spectral_class),
-
 		),
 
 		huh.NewGroup(
@@ -146,7 +169,6 @@ func mainx() {
 					huh.NewOption("Large Gas Giant", "Large Gas Giant"),
 				).
 				Value(&origin_diameter),
-
 		),
 
 		huh.NewGroup(
@@ -170,7 +192,6 @@ func mainx() {
 					huh.NewOption("Unknown", "Unknown"),
 				).
 				Value(&destination_spectral_class),
-
 		),
 
 		huh.NewGroup(
@@ -193,7 +214,6 @@ func mainx() {
 					huh.NewOption("Large Gas Giant", "Large Gas Giant"),
 				).
 				Value(&destination_diameter),
-
 		),
 
 		huh.NewGroup(
@@ -230,17 +250,46 @@ func mainx() {
 }
 
 func create_plan() {
-	outjump_plan = compute_jump(origin_spectral_class, origin_diameter, g_rating)
-	breakout_plan = compute_jump(destination_spectral_class, destination_diameter, g_rating)	
+	outjump_plan = ComputeJump(origin_spectral_class, origin_diameter, g_rating)
+	breakout_plan = ComputeJump(destination_spectral_class, destination_diameter, g_rating)
 }
 
-func compute_jump(spectral_class string, world_diameter string, acceleration float64) Jump {
-	jump := Jump {
+func ComputeSpectralClass(world WorldDetail) string {
+	runes := []rune(world.Stellar)
+	code := string(runes[0])
+	tenths, _ := strconv.ParseInt(string(runes[1]), 10, 64)
+	if tenths < 5 {
+		return code + "0"
+	} else {
+		return code + "5"
+	}
+}
+
+func ComputeWorldDiameter(world WorldDetail) string {
+	size, _ := strconv.ParseUint(string([]rune(world.Uwp)[1]), 10, 64)
+	km := 1600 * size
+	miles := float64(km) / 1.609
+	k := 0
+	for k = range planetary_diameter_map {
+		if miles <= float64(k) {
+			return planetary_diameter_map[k]
+		}
+	}
+
+	// Worst case, return the largest classification in the table
+	//
+	// The largest classification is the theoretical limit of planetary size,
+	// beyond which we get into stellar body territory.
+	return planetary_diameter_map[k]
+}
+
+func ComputeJump(spectral_class string, world_diameter string, acceleration float64) JumpParams {
+	jump := JumpParams{
 		SpectralClass: spectral_class,
-		Diameter: world_diameter,
+		Diameter:      world_diameter,
 	}
 	masking_row := masking_table[spectral_class]
-	
+
 	switch masking_row.Free {
 	case auto:
 		jump.Type = "Free"
@@ -261,7 +310,7 @@ func compute_jump(spectral_class string, world_diameter string, acceleration flo
 		is_near_side := dice(1) < 4
 		primary_factor := time_factor_table_2[spectral_class]
 		world_factor := time_factor_table_1[dice(1)]
-		
+
 		if is_near_side {
 			jump.TravelTime = primary_factor * choose_hours(masking_row.Time, acceleration)
 		} else {
@@ -269,7 +318,7 @@ func compute_jump(spectral_class string, world_diameter string, acceleration flo
 		}
 	}
 
-	return jump	
+	return jump
 }
 
 func dice(num int) int {

@@ -36,17 +36,18 @@ func newListKeyMap() *listKeyMap {
 	}
 }
 
-type FlightPlan struct {
+type FlightPlanItem struct {
+	Id      int
 	Origin  string
 	Dest    string
 	EstTime float64
 }
 
-func (p FlightPlan) Title() string { return fmt.Sprintf("%s to %s", p.Origin, p.Dest) }
-func (p FlightPlan) Description() string {
+func (p FlightPlanItem) Title() string { return fmt.Sprintf("%s to %s", p.Origin, p.Dest) }
+func (p FlightPlanItem) Description() string {
 	return fmt.Sprintf("Estimted travel time: %2.f hours", p.EstTime)
 }
-func (p FlightPlan) FilterValue() string { return fmt.Sprintf("%s %s", p.Origin, p.Dest) }
+func (p FlightPlanItem) FilterValue() string { return fmt.Sprintf("%s %s", p.Origin, p.Dest) }
 
 type ListPlansModel struct {
 	list list.Model
@@ -55,30 +56,9 @@ type ListPlansModel struct {
 }
 
 func NewListModel(lip lipgloss.Style, height int, width int) tea.Model {
-	m := ListPlansModel{}
-	items := []list.Item{
-		FlightPlan{
-			Origin:  "Trindel",
-			Dest:    "Archipelago",
-			EstTime: 123.4,
-		},
-		FlightPlan{
-			Origin:  "Marina",
-			Dest:    "Trindel",
-			EstTime: 39,
-		},
-		FlightPlan{
-			Origin:  "Paladin",
-			Dest:    "Marina",
-			EstTime: 66.54,
-		},
-		FlightPlan{
-			Origin:  "Haro",
-			Dest:    "Paladin",
-			EstTime: 381.4,
-		},
-	}
+	items := []list.Item{}
 
+	m := ListPlansModel{}
 	m.keys = newListKeyMap()
 
 	m.list = list.New(items, list.NewDefaultDelegate(), 0, 0)
@@ -104,15 +84,26 @@ func (m *ListPlansModel) Resize(height int, width int) {
 }
 
 func (m ListPlansModel) Init() tea.Cmd {
-	return nil
+	return loadFlightPlans()
 }
 
 func (m ListPlansModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-
+	log.Println(msg)
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Resize(msg.Height, msg.Width)
+	case []FlightPlan:
+		cmds = append(cmds, m.list.SetItems(createItems(msg)))
+	case RefreshListMsg:
+		cmds = append(cmds, loadFlightPlans())
+	case InsertPlanMsg:
+		item := FlightPlanItem{
+			Origin:  msg.FlightPlan.Origin.name,
+			Dest:    msg.FlightPlan.Destination.name,
+			EstTime: msg.FlightPlan.Outjump.TravelTime + msg.FlightPlan.Breakout.TravelTime + 168,
+		}
+		m.list.InsertItem(0, item)
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
@@ -121,11 +112,12 @@ func (m ListPlansModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch {
 		case key.Matches(msg, m.keys.deleteItem):
-			selected := m.list.SelectedItem()
-			m.list.RemoveItem(m.list.Index())
-			return m, m.list.NewStatusMessage(fmt.Sprintf("Deleted %s", selected.(FlightPlan).Title()))
+			if m.isVisiblySelected() {
+				item := m.list.SelectedItem().(FlightPlanItem)
+				cmds = append(cmds, deleteFlightPlan(item.Id))
+			}
 		case key.Matches(msg, m.keys.newItem):
-			log.Println("Sending create plan msg")
+			log.Println("create cmd")
 			cmds = append(cmds, func() tea.Msg { return CreatePlanMsg{} })
 		}
 
@@ -137,9 +129,55 @@ func (m ListPlansModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m ListPlansModel) isVisiblySelected() bool {
+	visibleItems := m.list.VisibleItems()
+	selectedItem := m.list.SelectedItem()
+	for i := range visibleItems {
+		if visibleItems[i] == selectedItem {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (m ListPlansModel) View() string {
 	return styles.Render(m.list.View())
 }
 
 type ListAllMsg struct {
+}
+
+type RefreshListMsg struct {
+}
+
+type PlanDeletedMsg struct {
+	id int
+}
+
+func createItems(plans []FlightPlan) []list.Item {
+	items := []list.Item{}
+	for i := range plans {
+		fp := plans[i]
+		items = append(items, FlightPlanItem{
+			Id:      fp.Id,
+			Origin:  fp.Origin.name,
+			Dest:    fp.Destination.name,
+			EstTime: float64(fp.EstTravelTime),
+		})
+	}
+	return items
+}
+
+func loadFlightPlans() tea.Cmd {
+	return func() tea.Msg {
+		return GetAllFlights()
+	}
+}
+
+func deleteFlightPlan(id int) tea.Cmd {
+	return func() tea.Msg {
+		DeleteFlightPlan(id)
+		return RefreshListMsg{}
+	}
 }

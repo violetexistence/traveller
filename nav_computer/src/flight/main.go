@@ -1,9 +1,6 @@
 package flight
 
 import (
-	"log"
-	"reflect"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -45,20 +42,19 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	log.Printf("Flight received msg: %v", reflect.TypeOf(msg))
-
 	var cmds []tea.Cmd
 
 	switch msg.(type) {
-	case ListAllMsg:
+	case ListAllMsg, CreatePlanFinishedMsg:
 		m.state = listView
 		m.viewModel = NewListModel(m.lip, m.height, m.width)
-		return m, nil
+		cmd := m.viewModel.Init()
+		cmds = append(cmds, cmd)
 	case CreatePlanMsg:
-		log.Println("Received create plan msg")
 		m.state = createView
 		m.viewModel = NewCreatePlan(m.lip, m.height, m.width)
-		return m, nil
+		cmd := m.viewModel.Init()
+		cmds = append(cmds, cmd)
 	}
 
 	var cmd tea.Cmd

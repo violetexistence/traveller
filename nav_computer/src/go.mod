@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/huh v0.4.2
 	github.com/charmbracelet/huh/spinner v0.0.0-20240618200428-90406d79077d
 	github.com/charmbracelet/lipgloss v0.11.0
+	github.com/mattn/go-sqlite3 v1.14.22
 )
 
 require (
