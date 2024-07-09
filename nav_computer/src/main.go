@@ -39,6 +39,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case error:
+		log.Fatal(msg)
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		m.width = msg.Width
@@ -80,6 +82,8 @@ func main() {
 	if _, err := tea.LogToFile(logfilePath, "simple"); err != nil {
 		log.Fatal(err)
 	}
+
+	flight.CreateTables()
 
 	_, err := tea.NewProgram(New(), tea.WithAltScreen()).Run()
 

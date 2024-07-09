@@ -5,13 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 )
 
-func search(query string) (*SearchResults, error) {
-	log.Println("Executing world search on travellermap.com for " + query)
-
+func Search(query string) (*SearchResults, error) {
 	resp, err := http.Get(fmt.Sprintf("https://travellermap.com/api/search?q=%s", query))
 	if err != nil {
 		return nil, err

@@ -3,6 +3,7 @@ package flight
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -11,7 +12,7 @@ func GetAllFlights() []FlightPlan {
 	db := openDatabase()
 	defer db.Close()
 
-	rows, err := db.Query("SELECT id, origin, dest, est_travel_time FROM plans")
+	rows, err := db.Query("SELECT id, origin, dest, est_travel_time, created_date FROM plans ORDER BY created_date DESC")
 	checkError(err)
 
 	defer rows.Close()
@@ -20,8 +21,10 @@ func GetAllFlights() []FlightPlan {
 
 	for rows.Next() {
 		plan := FlightPlan{}
-		err := rows.Scan(&plan.Id, &plan.Origin.name, &plan.Destination.name, &plan.EstTravelTime)
+		var createdDate string
+		err := rows.Scan(&plan.Id, &plan.Origin.name, &plan.Destination.name, &plan.EstTravelTime, &createdDate)
 		checkError(err)
+		plan.CreatedDate, _ = time.Parse(time.RFC3339, createdDate)
 		plans = append(plans, plan)
 	}
 
@@ -35,8 +38,8 @@ func CreateFlightPlan(plan FlightPlan) FlightPlan {
 	db := openDatabase()
 	defer db.Close()
 
-	stmt, _ := db.Prepare("INSERT INTO plans (origin, dest, est_travel_time) VALUES (?, ?, ?) RETURNING id, origin, dest, est_travel_time")
-	rows, _ := stmt.Query(plan.Origin.name, plan.Destination.name, plan.EstTravelTime)
+	stmt, _ := db.Prepare("INSERT INTO plans (origin, dest, est_travel_time, created_date) VALUES (?, ?, ?, ?) RETURNING id, origin, dest, est_travel_time, created_date")
+	rows, _ := stmt.Query(plan.Origin.name, plan.Destination.name, plan.EstTravelTime, plan.CreatedDate.Format(time.RFC3339))
 	defer stmt.Close()
 	defer rows.Close()
 
@@ -44,15 +47,16 @@ func CreateFlightPlan(plan FlightPlan) FlightPlan {
 
 	rows.Next()
 	updated := FlightPlan{}
-	err := rows.Scan(&plan.Id, &plan.Origin.name, &plan.Destination.name, &plan.EstTravelTime)
+	var createdDate string
+	err := rows.Scan(&plan.Id, &plan.Origin.name, &plan.Destination.name, &plan.EstTravelTime, &createdDate)
 	checkError(err)
 	checkError(rows.Err())
+	plan.CreatedDate, _ = time.Parse(time.RFC3339, createdDate)
 
 	return updated
 }
 
 func DeleteFlightPlan(id int) {
-	log.Printf("Deleting plan with id %d from the db", id)
 	db := openDatabase()
 	defer db.Close()
 
@@ -63,11 +67,9 @@ func DeleteFlightPlan(id int) {
 
 	checkError(err)
 
-	rowsDeleted, err := result.RowsAffected()
+	_, err = result.RowsAffected()
 
 	checkError(err)
-
-	log.Printf("Deleted %d plans from the db.", rowsDeleted)
 }
 
 func UpdateFlightPlan(plan FlightPlan) (FlightPlan, error) {
@@ -80,13 +82,14 @@ func openDatabase() *sql.DB {
 	return db
 }
 
-func createTables() {
+func CreateTables() {
 	createPlans := `
-    create table plans (
+    create table if not exists plans (
       id integer not null primary key,
       origin text not null,
       dest text not null,
-      est_travel_time integer
+      est_travel_time integer not null,
+      created_date text not null
     );
   `
 	db := openDatabase()

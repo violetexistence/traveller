@@ -1,2 +1,4 @@
 .obsidian
 bin
+*.db
+*.log

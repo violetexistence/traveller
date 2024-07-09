@@ -2,9 +2,11 @@ package flight
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"math"
 	"nav_computer/travellermap"
+	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -19,10 +21,10 @@ type CreatePlanModel struct {
 	currentStepId           stepId
 	currentStep             tea.Model
 	originQuery             string
-	originQueryResults      SearchResults
+	originQueryResults      travellermap.SearchResults
 	originWorld             WorldItem
 	destinationQuery        string
-	destinationQueryResults SearchResults
+	destinationQueryResults travellermap.SearchResults
 	destinationWorld        WorldItem
 	ship                    ShipDetail
 	finishing               bool
@@ -51,8 +53,6 @@ func (m CreatePlanModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
-	case error:
-		log.Println(msg.Error())
 	case TransitionMsg:
 		switch msg {
 		case PreviousMsg:
@@ -85,8 +85,40 @@ func (m CreatePlanModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m CreatePlanModel) View() string {
-	log.Println("render create")
-	return m.currentStep.View()
+	column := lipgloss.NewStyle().Width(40)
+	left := m.currentStep.View()
+	right := m.SummaryView()
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, column.Render(left), "   ", column.Render(right))
+}
+
+func (m CreatePlanModel) SummaryView() string {
+	frameStyle := lipgloss.NewStyle().
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("63")).
+		Padding(0, 1).
+		MarginTop(1).
+		Width(30)
+
+	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("164"))
+	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	var sb strings.Builder
+
+	for i := range summaries {
+		step := summaries[i]
+		label := summaryMap[step].label
+		value := summaryMap[step].value(m)
+		line := fmt.Sprintf("%s: %s", label, value)
+
+		if m.currentStepId == step {
+			sb.WriteString(activeStyle.Render(" -> " + line))
+		} else {
+			sb.WriteString(normalStyle.Render("    " + line))
+		}
+		sb.WriteString("\n")
+	}
+
+	return frameStyle.Render(sb.String())
 }
 
 func (m CreatePlanModel) Finish() (tea.Model, tea.Cmd) {
@@ -112,6 +144,7 @@ func (m CreatePlanModel) Finish() (tea.Model, tea.Cmd) {
 
 		travelTime := plan.Outjump.TravelTime + 168 + plan.Breakout.TravelTime
 		plan.EstTravelTime = int(math.Round(travelTime))
+		plan.CreatedDate = time.Now()
 
 		plan = CreateFlightPlan(plan)
 
@@ -186,6 +219,7 @@ type FlightPlan struct {
 	Outjump       travellermap.JumpParams
 	Breakout      travellermap.JumpParams
 	EstTravelTime int
+	CreatedDate   time.Time
 }
 
 type TransitionMsg uint
@@ -220,6 +254,31 @@ func createSteps() map[stepId]StepCreator {
 		chooseDestinationStep: createNewWorldSeach("Destination"),
 		shipDetailStep:        NewShipDetail,
 	}
+}
+
+var summaries = [3]stepId{chooseOriginStep, chooseDestinationStep, shipDetailStep}
+var summaryMap = map[stepId]struct {
+	label string
+	value func(m CreatePlanModel) string
+}{
+	chooseOriginStep: {
+		label: "Choose Origin",
+		value: func(m CreatePlanModel) string {
+			return m.originWorld.name
+		},
+	},
+	chooseDestinationStep: {
+		label: "Choose Destination",
+		value: func(m CreatePlanModel) string {
+			return m.destinationWorld.name
+		},
+	},
+	shipDetailStep: {
+		label: "Ship Detail",
+		value: func(m CreatePlanModel) string {
+			return fmt.Sprintf("%vG", m.ship.mRating)
+		},
+	},
 }
 
 func createNewWorldSeach(title string) StepCreator {

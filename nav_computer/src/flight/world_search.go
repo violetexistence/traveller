@@ -1,12 +1,8 @@
 package flight
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
+	"nav_computer/travellermap"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -21,7 +17,7 @@ type WorldSearchModel struct {
 	title   string
 	parent  CreatePlanModel
 	query   string
-	results SearchResults
+	results *travellermap.SearchResults
 	err     error
 	input   textinput.Model
 	list    list.Model
@@ -42,7 +38,7 @@ func (m WorldSearchModel) Init() tea.Cmd {
 
 func (m WorldSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case SearchResults:
+	case *travellermap.SearchResults:
 		m.state = SelectState
 		m.results = msg
 		m.list = buildList(m)
@@ -76,12 +72,11 @@ func (m WorldSearchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEnter:
 				m.query = m.input.Value()
 				m.state = WaitingState
-				cmd = searchForWorld(m.query)
+				cmd = search(m.query)
 				cmds = append(cmds, cmd)
 			}
 		}
 	case WaitingState:
-		log.Println("dispatching to spinner")
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		cmds = append(cmds, cmd)
@@ -162,59 +157,9 @@ func NewWorldSearch(m CreatePlanModel, title string) tea.Model {
 	model.input.PromptStyle = lipgloss.NewStyle().Foreground(Red)
 	model.input.Focus()
 	model.input.CharLimit = 156
-	model.input.Width = m.width
 	model.input.Cursor.Style = lipgloss.NewStyle().Foreground(Green)
 
 	return model
-}
-
-func searchForWorld(query string) tea.Cmd {
-	return func() tea.Msg {
-		log.Println("Executing world search on travellermap.com for " + query)
-
-		resp, err := http.Get(fmt.Sprintf("https://travellermap.com/api/search?q=%s", query))
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			return errors.New(fmt.Sprintf("%d response from travellermap", resp.StatusCode))
-		}
-		body, _ := io.ReadAll(io.Reader(resp.Body))
-		var results SearchResults
-		if err = json.Unmarshal(body, &results); err != nil {
-			return err
-		}
-		log.Printf("Response from travellermap.com with %d results", results.Results.Count)
-		return results
-	}
-}
-
-type SearchResults struct {
-	Results struct {
-		Count int `json:"Count"`
-		Items []struct {
-			World *struct {
-				HexX       int    `json:"HexX"`
-				HexY       int    `json:"HexY"`
-				Sector     string `json:"Sector"`
-				Uwp        string `json:"Uwp"`
-				SectorX    int    `json:"SectorX"`
-				SectorY    int    `json:"SectorY"`
-				Name       string `json:"Name"`
-				SectorTags string `json:"SectorTags"`
-			} `json:"World,omitempty"`
-			Label *struct {
-				HexX       int    `json:"HexX"`
-				HexY       int    `json:"HexY"`
-				Scale      int    `json:"Scale"`
-				SectorX    int    `json:"SectorX"`
-				SectorY    int    `json:"SectorY"`
-				Name       string `json:"Name"`
-				SectorTags string `json:"SectorTags"`
-			} `json:"Label,omitempty"`
-		} `json:"Items"`
-	} `json:"Results"`
 }
 
 func buildList(m WorldSearchModel) list.Model {
@@ -233,8 +178,8 @@ func buildList(m WorldSearchModel) list.Model {
 		}
 	}
 
-	h, v := m.parent.lip.GetFrameSize()
-	list := list.New(items, list.NewDefaultDelegate(), m.parent.width-h, m.parent.height-v)
+	//h, v := m.parent.lip.GetFrameSize()
+	list := list.New(items, list.NewDefaultDelegate(), 40, 40)
 	list.Title = fmt.Sprintf("Matches for %s: \"%s\"", m.title, m.query)
 
 	return list
@@ -249,7 +194,7 @@ type WorldItem struct {
 
 func (w WorldItem) Title() string { return w.name }
 func (w WorldItem) Description() string {
-	return fmt.Sprintf("%s Sector, %s, UWP: %s", w.sector, w.hex, w.uwp)
+	return fmt.Sprintf("%s[%s] %s", w.sector, w.hex, w.uwp)
 }
 func (w WorldItem) FilterValue() string {
 	return w.Title() + w.Description()
@@ -263,6 +208,17 @@ func selectWorld(world WorldItem) tea.Cmd {
 	return func() tea.Msg {
 		return WorldSelectedMsg{
 			world: world,
+		}
+	}
+}
+
+func search(query string) tea.Cmd {
+	return func() tea.Msg {
+		results, err := travellermap.Search(query)
+		if err == nil {
+			return results
+		} else {
+			return err
 		}
 	}
 }

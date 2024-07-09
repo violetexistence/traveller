@@ -2,7 +2,6 @@ package flight
 
 import (
 	"fmt"
-	"log"
 	"nav_computer/menu"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -89,7 +88,7 @@ func (m ListPlansModel) Init() tea.Cmd {
 
 func (m ListPlansModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	log.Println(msg)
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.Resize(msg.Height, msg.Width)
@@ -117,7 +116,6 @@ func (m ListPlansModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, deleteFlightPlan(item.Id))
 			}
 		case key.Matches(msg, m.keys.newItem):
-			log.Println("create cmd")
 			cmds = append(cmds, func() tea.Msg { return CreatePlanMsg{} })
 		}
 
