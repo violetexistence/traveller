@@ -16,7 +16,6 @@ type CreatePlanModel struct {
 	lip                     lipgloss.Style
 	height                  int
 	width                   int
-	steps                   map[stepId]StepCreator
 	savedSteps              map[stepId]tea.Model
 	currentStepId           stepId
 	currentStep             tea.Model
@@ -32,15 +31,13 @@ type CreatePlanModel struct {
 
 func NewCreatePlan(lip lipgloss.Style, height int, width int) tea.Model {
 	m := CreatePlanModel{
-		lip:           lip,
-		height:        height,
-		width:         width,
-		steps:         createSteps(),
-		savedSteps:    make(map[stepId]tea.Model),
-		currentStepId: chooseOriginStep,
+		lip:        lip,
+		height:     height,
+		width:      width,
+		savedSteps: make(map[stepId]tea.Model),
 	}
 
-	m.currentStep = m.steps[chooseOriginStep](m)
+	m.currentStep = stepDefinitions[0](m)
 
 	return m
 }
@@ -74,7 +71,7 @@ func (m CreatePlanModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, transition(NextMsg)
 	case ShipDetail:
 		m.ship = msg
-		return m.Finish()
+		return m, transition(NextMsg)
 	}
 
 	var cmd tea.Cmd
@@ -177,15 +174,18 @@ func (m CreatePlanModel) Abort() (tea.Model, tea.Cmd) {
 
 func (m CreatePlanModel) Next() (tea.Model, tea.Cmd) {
 	nextStepId := m.currentStepId + 1
+
 	if nextStep, ok := m.savedSteps[nextStepId]; ok {
 		m.savedSteps[m.currentStepId] = m.currentStep
 		m.currentStepId = nextStepId
 		m.currentStep = nextStep
-	} else if nextStepCreator, ok := m.steps[nextStepId]; ok {
+	} else if nextStepCreator, ok := stepDefinitions[nextStepId]; ok {
 		m.savedSteps[m.currentStepId] = m.currentStep
 		m.currentStepId = nextStepId
 		nextStep := nextStepCreator(m)
 		m.currentStep = nextStep
+	} else {
+		return m.Finish()
 	}
 
 	return m, nil
@@ -197,15 +197,16 @@ func (m CreatePlanModel) Prev() (tea.Model, tea.Cmd) {
 		m.savedSteps[m.currentStepId] = m.currentStep
 		m.currentStepId = prevStepId
 		m.currentStep = prevStep
-	} else if stepCreator, ok := m.steps[prevStepId]; ok {
-		m.savedSteps[m.currentStepId] = m.currentStep
-		m.currentStepId = prevStepId
-		m.currentStep = stepCreator(m)
 	} else {
 		return m.Abort()
 	}
 
-	return m, nil
+	return m, func() tea.Msg {
+		return ReturnToStepMsg{}
+	}
+}
+
+type ReturnToStepMsg struct {
 }
 
 type InsertPlanMsg struct {
@@ -240,23 +241,21 @@ func transition(msg TransitionMsg) tea.Cmd {
 type stepId uint
 
 const (
-	chooseOriginStep stepId = iota
+	shipDetailStep stepId = iota
+	chooseOriginStep
 	chooseDestinationStep
-	shipDetailStep
 	finishStep
 )
 
 type StepCreator func(m CreatePlanModel) tea.Model
 
-func createSteps() map[stepId]StepCreator {
-	return map[stepId]StepCreator{
-		chooseOriginStep:      createNewWorldSeach("Origin"),
-		chooseDestinationStep: createNewWorldSeach("Destination"),
-		shipDetailStep:        NewShipDetail,
-	}
+var stepDefinitions = map[stepId]StepCreator{
+	chooseOriginStep:      createNewWorldSeach("Origin"),
+	chooseDestinationStep: createNewWorldSeach("Destination"),
+	shipDetailStep:        NewShipDetail,
 }
 
-var summaries = [3]stepId{chooseOriginStep, chooseDestinationStep, shipDetailStep}
+var summaries = [3]stepId{shipDetailStep, chooseOriginStep, chooseDestinationStep}
 var summaryMap = map[stepId]struct {
 	label string
 	value func(m CreatePlanModel) string

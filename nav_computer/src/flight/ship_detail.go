@@ -29,9 +29,8 @@ func (m ShipDetailModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEsc, tea.KeyCtrlC:
 			return m, transition(PreviousMsg)
 		}
-	case error:
-		m.errorMessage = msg.Error()
-		return m, nil
+	case ReturnToStepMsg:
+		return m.Restart()
 	}
 
 	form, cmd := m.form.Update(msg)
@@ -56,21 +55,31 @@ func (m ShipDetailModel) View() string {
 	}
 }
 
+func (m ShipDetailModel) Restart() (tea.Model, tea.Cmd) {
+	m.form = createForm(m)
+	m.form.Init()
+
+	return m, nil
+}
+
 func NewShipDetail(model CreatePlanModel) tea.Model {
 	m := ShipDetailModel{
 		parent: model,
-		form: *huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[float64]().Title("M-Drive Rating").Description("(Acceleration)").Key("mrating").Options(
-					huh.NewOption("0.5G", 0.5),
-					huh.NewOption("1G", 1.0),
-					huh.NewOption("2G", 2.0),
-				),
-			),
-		),
 	}
-
+	m.form = createForm(m)
 	m.form.Init()
 
 	return m
+}
+
+func createForm(model ShipDetailModel) huh.Form {
+	return *huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[float64]().Title("M-Drive Rating").Description("(Acceleration)").Key("mrating").Options(
+				huh.NewOption("0.5G", 0.5).Selected(model.ship.mRating == 0.5),
+				huh.NewOption("1G", 1.0).Selected(model.ship.mRating == 1.0),
+				huh.NewOption("2G", 2.0).Selected(model.ship.mRating == 2.0),
+			),
+		),
+	)
 }
