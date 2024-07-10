@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 )
 
@@ -52,8 +53,14 @@ type SearchResults struct {
 	} `json:"Results"`
 }
 
-func FetchWorldDetail(sector string, hex string) (*WorldDetail, error) {
-	resp, err := http.Get(fmt.Sprintf("https://travellermap.com/data/%s/%s", sector, hex))
+func FetchNearbyWorlds(sector string, hex string, within int) ([]WorldDetail, error) {
+	url := fmt.Sprintf("https://travellermap.com/api/jumpworlds?sector=%s&hex=%s&jump=%d",
+		sector,
+		hex,
+		within,
+	)
+	log.Println(url)
+	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -68,9 +75,22 @@ func FetchWorldDetail(sector string, hex string) (*WorldDetail, error) {
 	}
 
 	if len(results.Worlds) > 0 {
-		return &results.Worlds[0], nil
+		return results.Worlds, nil
 	}
 	return nil, errors.New(fmt.Sprintf("No results on travellermap for %s/%s", sector, hex))
+}
+
+func FetchWorldDetail(sector string, hex string) (*WorldDetail, error) {
+	worlds, err := FetchNearbyWorlds(sector, hex, 0)
+	if err == nil {
+		if len(worlds) > 0 {
+			return &worlds[0], nil
+		} else {
+			return nil, errors.New(fmt.Sprintf("No world found at %s %s", sector, hex))
+		}
+	} else {
+		return nil, err
+	}
 }
 
 type WorldResults struct {

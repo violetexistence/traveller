@@ -1,7 +1,6 @@
 package flight
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"nav_computer/travellermap"
@@ -21,10 +20,10 @@ type CreatePlanModel struct {
 	currentStep             tea.Model
 	originQuery             string
 	originQueryResults      travellermap.SearchResults
-	originWorld             WorldItem
+	originWorld             travellermap.WorldDetail
 	destinationQuery        string
 	destinationQueryResults travellermap.SearchResults
-	destinationWorld        WorldItem
+	destinationWorld        travellermap.WorldDetail
 	ship                    ShipDetail
 	finishing               bool
 }
@@ -152,16 +151,12 @@ func (m CreatePlanModel) Finish() (tea.Model, tea.Cmd) {
 	}
 }
 
-func computeJump(world WorldItem, ship ShipDetail) (*travellermap.JumpParams, error) {
-	if originDetail, err := travellermap.FetchWorldDetail(world.sector, world.hex); err == nil {
-		stellerClass := travellermap.ComputeSpectralClass(*originDetail)
-		worldDiameter := travellermap.ComputeWorldDiameter(*originDetail)
-		jumpParams := travellermap.ComputeJump(stellerClass, worldDiameter, ship.mRating)
+func computeJump(world travellermap.WorldDetail, ship ShipDetail) (*travellermap.JumpParams, error) {
+	stellerClass := travellermap.ComputeSpectralClass(world)
+	worldDiameter := travellermap.ComputeWorldDiameter(world)
+	jumpParams := travellermap.ComputeJump(stellerClass, worldDiameter, ship.mRating)
 
-		return &jumpParams, nil
-	} else {
-		return nil, errors.Join(errors.New("Error requesting world detail from travellermap"), err)
-	}
+	return &jumpParams, nil
 }
 
 func (m CreatePlanModel) Abort() (tea.Model, tea.Cmd) {
@@ -174,6 +169,7 @@ func (m CreatePlanModel) Abort() (tea.Model, tea.Cmd) {
 
 func (m CreatePlanModel) Next() (tea.Model, tea.Cmd) {
 	nextStepId := m.currentStepId + 1
+	var cmd tea.Cmd
 
 	if nextStep, ok := m.savedSteps[nextStepId]; ok {
 		m.savedSteps[m.currentStepId] = m.currentStep
@@ -184,11 +180,12 @@ func (m CreatePlanModel) Next() (tea.Model, tea.Cmd) {
 		m.currentStepId = nextStepId
 		nextStep := nextStepCreator(m)
 		m.currentStep = nextStep
+		cmd = m.currentStep.Init()
 	} else {
 		return m.Finish()
 	}
 
-	return m, nil
+	return m, cmd
 }
 
 func (m CreatePlanModel) Prev() (tea.Model, tea.Cmd) {
@@ -215,8 +212,8 @@ type InsertPlanMsg struct {
 
 type FlightPlan struct {
 	Id            int
-	Origin        WorldItem
-	Destination   WorldItem
+	Origin        travellermap.WorldDetail
+	Destination   travellermap.WorldDetail
 	Outjump       travellermap.JumpParams
 	Breakout      travellermap.JumpParams
 	EstTravelTime int
@@ -251,7 +248,7 @@ type StepCreator func(m CreatePlanModel) tea.Model
 
 var stepDefinitions = map[stepId]StepCreator{
 	chooseOriginStep:      createNewWorldSeach("Origin"),
-	chooseDestinationStep: createNewWorldSeach("Destination"),
+	chooseDestinationStep: NewDestinationScreen,
 	shipDetailStep:        NewShipDetail,
 }
 
@@ -263,13 +260,13 @@ var summaryMap = map[stepId]struct {
 	chooseOriginStep: {
 		label: "Choose Origin",
 		value: func(m CreatePlanModel) string {
-			return m.originWorld.name
+			return m.originWorld.Name
 		},
 	},
 	chooseDestinationStep: {
 		label: "Choose Destination",
 		value: func(m CreatePlanModel) string {
-			return m.destinationWorld.name
+			return m.destinationWorld.Name
 		},
 	},
 	shipDetailStep: {
@@ -283,6 +280,12 @@ var summaryMap = map[stepId]struct {
 func createNewWorldSeach(title string) StepCreator {
 	return func(model CreatePlanModel) tea.Model {
 		return NewWorldSearch(model, title)
+	}
+}
+
+func createNewDestinationScreen() StepCreator {
+	return func(model CreatePlanModel) tea.Model {
+		return NewDestinationScreen(model)
 	}
 }
 

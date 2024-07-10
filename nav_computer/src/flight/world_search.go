@@ -201,13 +201,17 @@ func (w WorldItem) FilterValue() string {
 }
 
 type WorldSelectedMsg struct {
-	world WorldItem
+	world travellermap.WorldDetail
 }
 
 func selectWorld(world WorldItem) tea.Cmd {
 	return func() tea.Msg {
-		return WorldSelectedMsg{
-			world: world,
+		if detail, err := travellermap.FetchWorldDetail(world.sector, world.hex); err == nil {
+			return WorldSelectedMsg{
+				world: *detail,
+			}
+		} else {
+			return err
 		}
 	}
 }

@@ -98,8 +98,8 @@ func (m ListPlansModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, loadFlightPlans())
 	case InsertPlanMsg:
 		item := FlightPlanItem{
-			Origin:  msg.FlightPlan.Origin.name,
-			Dest:    msg.FlightPlan.Destination.name,
+			Origin:  msg.FlightPlan.Origin.Name,
+			Dest:    msg.FlightPlan.Destination.Name,
 			EstTime: msg.FlightPlan.Outjump.TravelTime + msg.FlightPlan.Breakout.TravelTime + 168,
 		}
 		m.list.InsertItem(0, item)
@@ -159,8 +159,8 @@ func createItems(plans []FlightPlan) []list.Item {
 		fp := plans[i]
 		items = append(items, FlightPlanItem{
 			Id:      fp.Id,
-			Origin:  fp.Origin.name,
-			Dest:    fp.Destination.name,
+			Origin:  fp.Origin.Name,
+			Dest:    fp.Destination.Name,
 			EstTime: float64(fp.EstTravelTime),
 		})
 	}

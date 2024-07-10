@@ -22,7 +22,7 @@ func GetAllFlights() []FlightPlan {
 	for rows.Next() {
 		plan := FlightPlan{}
 		var createdDate string
-		err := rows.Scan(&plan.Id, &plan.Origin.name, &plan.Destination.name, &plan.EstTravelTime, &createdDate)
+		err := rows.Scan(&plan.Id, &plan.Origin.Name, &plan.Destination.Name, &plan.EstTravelTime, &createdDate)
 		checkError(err)
 		plan.CreatedDate, _ = time.Parse(time.RFC3339, createdDate)
 		plans = append(plans, plan)
@@ -39,7 +39,7 @@ func CreateFlightPlan(plan FlightPlan) FlightPlan {
 	defer db.Close()
 
 	stmt, _ := db.Prepare("INSERT INTO plans (origin, dest, est_travel_time, created_date) VALUES (?, ?, ?, ?) RETURNING id, origin, dest, est_travel_time, created_date")
-	rows, _ := stmt.Query(plan.Origin.name, plan.Destination.name, plan.EstTravelTime, plan.CreatedDate.Format(time.RFC3339))
+	rows, _ := stmt.Query(plan.Origin.Name, plan.Destination.Name, plan.EstTravelTime, plan.CreatedDate.Format(time.RFC3339))
 	defer stmt.Close()
 	defer rows.Close()
 
@@ -48,7 +48,7 @@ func CreateFlightPlan(plan FlightPlan) FlightPlan {
 	rows.Next()
 	updated := FlightPlan{}
 	var createdDate string
-	err := rows.Scan(&plan.Id, &plan.Origin.name, &plan.Destination.name, &plan.EstTravelTime, &createdDate)
+	err := rows.Scan(&plan.Id, &plan.Origin.Name, &plan.Destination.Name, &plan.EstTravelTime, &createdDate)
 	checkError(err)
 	checkError(rows.Err())
 	plan.CreatedDate, _ = time.Parse(time.RFC3339, createdDate)
