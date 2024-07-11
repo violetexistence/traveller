@@ -110,6 +110,14 @@ func fetchWorldsInRange(m DestinationScreen) tea.Cmd {
 	return func() tea.Msg {
 		worlds, err := travellermap.FetchNearbyWorlds(m.startingSector, m.startingHex, m.jump)
 		if err == nil {
+			// remove origin from slice
+			for i := range worlds {
+				w := worlds[i]
+				if w.Sector == m.startingSector && w.Hex == m.startingHex {
+					worlds = append(worlds[:i], worlds[i+1:]...)
+					break
+				}
+			}
 			return worldsInRangeMsg{
 				worlds: worlds,
 			}
@@ -157,7 +165,7 @@ func (item DestinationWorldItem) Title() string {
 }
 
 func (item DestinationWorldItem) Description() string {
-	return fmt.Sprintf("%s %s", item.world.SectorAbbreviation, item.world.Hex)
+	return fmt.Sprintf("%s %s %s", item.world.Sector, item.world.Hex, item.world.Allegiance)
 }
 
 func (item DestinationWorldItem) FilterValue() string {
