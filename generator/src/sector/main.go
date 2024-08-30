@@ -86,6 +86,11 @@ const (
 	population_8
 	population_9
 	population_A
+	population_B
+	population_C
+	population_D
+	population_E
+	population_F
 )
 
 type governmentType int
@@ -162,11 +167,11 @@ type sector struct {
 type hexInfo struct {
 	name       string
 	location   string
-	hz         int
+	hzVar      int
 	uwp        string
 	bases      string
 	remarks    string
-	zone       string
+	zone       zoneType
 	PBG        string
 	allegiance string
 	stars      string
@@ -250,6 +255,63 @@ func getSpectralSize(class spectralClass) string {
 	row := flux() + 6
 	col := spectralSizeMatrixColumns[class.letter]
 	return spectralSizeMatrix[row][col]
+}
+
+func getHzVar(star star) int {
+	hzVar := 0
+	dm := 0
+
+	switch star.class.letter {
+	case "M":
+		dm += 2
+	case "O", "B":
+		dm -= 2
+	}
+
+	roll := flux() + dm
+
+	switch {
+	case roll < -5:
+		hzVar = -2
+	case roll > -6 && roll < -2:
+		hzVar = -1
+	case roll > 2 && roll < 6:
+		hzVar = 1
+	case roll > 5:
+		hzVar = 2
+	}
+
+	return hzVar
+}
+
+type zoneType string
+
+const (
+	greenZone = "G"
+	amberZone = "A"
+	redZone   = "R"
+)
+
+func getZone(hex hexInfo) zoneType {
+	starport := string(hex.uwp[St])
+	oppressionLevel := getNumericUwpValue(hex.uwp, Gov) + getNumericUwpValue(hex.uwp, Law)
+
+	switch {
+	case starport == "X":
+		return redZone
+	case oppressionLevel > 21:
+		return redZone
+	case is(Pop, "0123456")(hex):
+		return amberZone
+	case oppressionLevel > 19:
+		return amberZone
+	}
+
+	return greenZone
+}
+
+func getNumericUwpValue(uwp string, element uwpElementType) int {
+	return decodeHex(string(uwp[element]))
 }
 
 func newSpinner() spinner.Model {
@@ -359,7 +421,6 @@ func (m model) View() string {
 
 func generateSector() tea.Cmd {
 	return func() tea.Msg {
-		coin := newCoin()
 		planets := newPlanets()
 
 		var worlds []hexInfo
@@ -369,7 +430,7 @@ func generateSector() tea.Cmd {
 				locationCode := getLocationCode(hx, hy)
 
 				if coin.Toss() {
-					population := populationType(dice(2) - 2)
+					population := getPopulation()
 					starport := getStarportQuality(population)
 					size := worldSize(dice(2) - 2)
 					atmosphere := getAtmosphere(size)
@@ -383,6 +444,8 @@ func generateSector() tea.Cmd {
 					bases := getBases(starport)
 
 					primary := getPrimary()
+					stars := fmt.Sprintf("%s%d %s", primary.class.letter, primary.class.numeral, primary.size)
+					hzVar := getHzVar(primary)
 
 					hex := hexInfo{
 						name:     planets.Name(),
@@ -390,7 +453,20 @@ func generateSector() tea.Cmd {
 						uwp:      uwp,
 						bases:    bases,
 						primary:  primary,
+						hzVar:    hzVar,
+						stars:    stars,
 					}
+
+					hex.zone = getZone(hex)
+					hex.remarks = getTradeCodes(hex)
+
+					populationMultiplier := getPopulationMultiplier(hex)
+					belts := applyMinimum(dice(1)-3, 0)
+					gasGiants := applyMinimum(dice(2)/2-2, 0)
+					hex.PBG = fmt.Sprintf("%d%d%d", populationMultiplier, belts, gasGiants)
+
+					hex.allegiance = "Gc"
+					hex.ix = fmt.Sprintf("{ %d }", getImportanceExtension(hex))
 
 					worlds = append(worlds, hex)
 				}
@@ -404,6 +480,73 @@ func generateSector() tea.Cmd {
 
 		return sector
 	}
+}
+
+func getPopulationMultiplier(hex hexInfo) int {
+	if getNumericUwpValue(hex.uwp, Pop) == 0 {
+		return 0
+	}
+	return rollDecimal(1, 9)
+}
+
+type baseLetter string
+
+const (
+	navalBase      baseLetter = "N"
+	navalDepot                = "D"
+	scoutBase                 = "S"
+	waystation                = "W"
+	militaryBase              = "M"
+	scientificBase            = "E"
+	diplomaticBase            = "P"
+	culturalBase              = "C"
+)
+
+func hasBase(required baseLetter) requirement {
+	return func(w hexInfo) bool {
+		for i := 0; i < len(w.bases); i++ {
+			found := string(w.bases[i])
+			if found == string(required) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func getImportanceExtension(hex hexInfo) int {
+	value := 0
+
+	switch {
+	case is(St, "AB")(hex):
+		value += 1
+	case is(St, "DEX")(hex):
+		value -= 1
+	}
+
+	tech := techLevel(getNumericUwpValue(hex.uwp, TL))
+
+	if tech > technology_F {
+		value += 1
+	}
+
+	if tech > technology_9 {
+		value += 1
+	}
+
+	if tech < technology_9 {
+		value -= 1
+	}
+
+	if hasBase("N")(hex) && hasBase("S")(hex) {
+		value += 1
+	}
+
+	if hasBase("W")(hex) {
+		value += 1
+	}
+
+	return value
 }
 
 func check(e error) {
@@ -528,6 +671,12 @@ func starport(allowed string) requirement {
 	}
 }
 
+func climate(hzVar int) requirement {
+	return func(w hexInfo) bool {
+		return w.hzVar == hzVar
+	}
+}
+
 var tradeCodes = []definition{
 	// Planetary
 	//
@@ -561,7 +710,26 @@ var tradeCodes = []definition{
 	define("Ri", is(Atm, "68"), is(Pop, "678")),
 	// Climate
 	//
+	define("Fr", is(Siz, "23456789"), is(Hyd, "123456789A"), climate(2)),
+	define("Ho", climate(-1)),
+	define("Co", climate(1)),
+	define("Tr", is(Siz, "6789"), is(Atm, "456789"), is(Hyd, "34567"), climate(-1)),
+	define("Tu", is(Siz, "6789"), is(Atm, "456789"), is(Hyd, "34567"), climate(1)),
+}
 
+func getTradeCodes(hex hexInfo) string {
+	var codes []string
+
+	for _, def := range tradeCodes {
+		for _, req := range def.require {
+			if !req(hex) {
+				break
+			}
+		}
+		codes = append(codes, def.code)
+	}
+
+	return strings.Join(codes, " ")
 }
 
 func getBases(starport starportClass) string {
@@ -591,6 +759,15 @@ func getBases(starport starportClass) string {
 	}
 
 	return result
+}
+
+func getPopulation() populationType {
+	roll := dice(2) - 2
+
+	if roll == 10 {
+		return populationType(dice(2) + 3)
+	}
+	return populationType(roll)
 }
 
 func getStarportQuality(population populationType) starportClass {
