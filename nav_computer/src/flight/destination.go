@@ -44,7 +44,7 @@ func (m DestinationScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.spinner.Tick, fetchWorldsInRange(m))
 	case worldsInRangeMsg:
 		m.mode = listMode
-		m.worldsInRange = msg.worlds
+		m.SetWorldsInRange(msg.worlds)
 		m.list = createList(m)
 	case tea.KeyMsg:
 		if m.list.FilterState() == list.Filtering {
@@ -110,14 +110,6 @@ func fetchWorldsInRange(m DestinationScreen) tea.Cmd {
 	return func() tea.Msg {
 		worlds, err := travellermap.FetchNearbyWorlds(m.startingSector, m.startingHex, m.jump)
 		if err == nil {
-			// remove origin from slice
-			for i := range worlds {
-				w := worlds[i]
-				if w.Sector == m.startingSector && w.Hex == m.startingHex {
-					worlds = append(worlds[:i], worlds[i+1:]...)
-					break
-				}
-			}
 			return worldsInRangeMsg{
 				worlds: worlds,
 			}
@@ -125,6 +117,20 @@ func fetchWorldsInRange(m DestinationScreen) tea.Cmd {
 			return err
 		}
 	}
+}
+
+func (m DestinationScreen) SetWorldsInRange(worlds []travellermap.WorldDetail) {
+	var minusOrigin []travellermap.WorldDetail
+
+	// inspect the worlds given and remove the starting world
+	for i := range worlds {
+		w := worlds[i]
+		if w.Sector == m.startingSector && w.Hex == m.startingHex {
+			minusOrigin = append(worlds[:i], worlds[i+1:]...)
+			break
+		}
+	}
+	m.worldsInRange = minusOrigin
 }
 
 type startMsg struct{}

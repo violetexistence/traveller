@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<Sector>
+	<Name>Galactic Commons</Name>
+	
+	<Subsector Index="A">Darksky</Subsector>
+	<Subsector Index="B">Atoon</Subsector>
+	<Subsector Index="C">Denkard</Subsector>
+	<Subsector Index="D">Lowton</Subsector>
+	<Subsector Index="E">Abysm</Subsector>
+	<Subsector Index="F">Windfleet</Subsector>
+	<Subsector Index="G">Castra</Subsector>
+	<Subsector Index="H">Forcett</Subsector>
+	<Subsector Index="I">Arconna</Subsector>
+	<Subsector Index="J">Beckann</Subsector>
+	<Subsector Index="K">Ashton</Subsector>
+	<Subsector Index="L">Riftin</Subsector>
+	<Subsector Index="M">Ownsbee</Subsector>
+	<Subsector Index="N">Ariel</Subsector>
+	<Subsector Index="O">Cinder</Subsector>
+	<Subsector Index="P">Farina</Subsector>
+</Sector>
