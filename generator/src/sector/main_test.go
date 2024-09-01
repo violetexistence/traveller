@@ -47,3 +47,15 @@ func TestGetHzVar(t *testing.T) {
 
 	t.Logf("results: %v", results)
 }
+
+func TestGetImportance(t *testing.T) {
+	var hex hexInfo
+	hex.uwp = "C160632-6"
+	hex.bases = "S"
+
+	actual := getImportanceExtension(hex)
+
+	if actual != -1 {
+		t.Fatalf("Wrong! expected %d to be %d", actual, -1)
+	}
+}

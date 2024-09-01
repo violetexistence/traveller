@@ -142,6 +142,7 @@ type techLevel int
 
 const (
 	technology_0 techLevel = iota
+	technology_1
 	technology_2
 	technology_3
 	technology_4
@@ -165,22 +166,31 @@ type sector struct {
 }
 
 type hexInfo struct {
-	name       string
-	location   string
-	hzVar      int
-	uwp        string
-	bases      string
-	remarks    string
-	zone       zoneType
-	PBG        string
-	allegiance string
-	stars      string
-	ix         string
-	ex         string
-	cx         string
-	nobility   string
-	worlds     int
-	primary    star
+	name                 string
+	location             string
+	hzVar                int
+	uwp                  string
+	bases                string
+	remarks              string
+	zone                 zoneType
+	PBG                  string
+	allegiance           string
+	stars                string
+	importance           int
+	resources            int
+	labor                int
+	infrastructure       int
+	efficiencies         int
+	heterogeneity        int
+	acceptance           int
+	strangeness          int
+	symbols              int
+	nobility             []nobleTitle
+	worlds               int
+	primary              star
+	populationMultiplier int
+	belts                int
+	gasGiants            int
 }
 
 var coin = newCoin()
@@ -214,25 +224,33 @@ func rollDecimal(min int, max int) int {
 
 func getSpectralType(fluxValue int) string {
 	row := fluxValue + 6
-	return spectralSizeMatrix[row][0]
+	spectralType := spectralInfoMatrix[row][0]
+
+	if spectralType == "OB" {
+		if coin.Toss() {
+			spectralType = "O"
+		} else {
+			spectralType = "B"
+		}
+	}
+
+	return spectralType
 }
 
-var spectralSizeMatrix = [15][8]string{
+var spectralInfoMatrix = [13][8]string{
+	{"O", "Ia", "Ia", "Ia", "II", "II", "II", "II"},
 	{"OB", "Ia", "Ia", "Ia", "II", "II", "II", "II"},
 	{"A", "Ia", "Ia", "Ia", "II", "II", "II", "II"},
 	{"A", "Ib", "Ib", "Ib", "III", "III", "III", "II"},
 	{"F", "II", "II", "II", "IV", "IV", "IV", "II"},
 	{"F", "III", "III", "III", "V", "V", "V", "III"},
-	{"G", "III", "III", "IV", "V", "V", "V", "V"},
 	{"G", "III", "III", "V", "V", "V", "V", "V"},
 	{"K", "V", "III", "V", "V", "V", "V", "V"},
 	{"K", "V", "V", "V", "V", "V", "V", "V"},
 	{"M", "V", "V", "V", "V", "V", "V", "V"},
 	{"M", "IV", "IV", "V", "VI", "VI", "VI", "VI"},
 	{"M", "D", "D", "D", "D", "D", "D", "D"},
-	{"BD", "IV", "IV", "V", "VI", "VI", "VI", "VI"},
-	{"BD", "IV", "IV", "V", "VI", "VI", "VI", "VI"},
-	{"BD", "IV", "IV", "V", "VI", "VI", "VI", "VI"},
+	{"M", "D", "D", "D", "D", "D", "D", "D"},
 }
 
 var spectralSizeMatrixColumns = map[string]int{
@@ -254,7 +272,19 @@ type spectralClass struct {
 func getSpectralSize(class spectralClass) string {
 	row := flux() + 6
 	col := spectralSizeMatrixColumns[class.letter]
-	return spectralSizeMatrix[row][col]
+	size := spectralInfoMatrix[row][col]
+
+	switch {
+	case size == "IV":
+		if class.letter == "K" && class.numeral > 4 {
+			return "V"
+		}
+	case size == "VI":
+		if class.letter == "F" && class.numeral < 5 {
+			return "V"
+		}
+	}
+	return size
 }
 
 func getHzVar(star star) int {
@@ -292,6 +322,42 @@ const (
 	redZone   = "R"
 )
 
+func getWorlds(hex hexInfo) int {
+	return 1 + hex.gasGiants + hex.belts + dice(2)
+}
+
+func getHeterogeneity(hex hexInfo) int {
+	pop := getNumericUwpValue(hex.uwp, Pop)
+	if pop == 0 {
+		return 0
+	}
+	return applyRange(pop+flux(), 1, 0xF)
+}
+
+func getAcceptance(hex hexInfo) int {
+	pop := getNumericUwpValue(hex.uwp, Pop)
+	if pop == 0 {
+		return 0
+	}
+	return applyRange(pop+hex.importance, 1, 0xF)
+}
+
+func getStrangeness(hex hexInfo) int {
+	pop := getNumericUwpValue(hex.uwp, Pop)
+	if pop == 0 {
+		return 0
+	}
+	return applyMinimum(flux()+5, 1)
+}
+
+func getSymbols(hex hexInfo) int {
+	pop := getNumericUwpValue(hex.uwp, Pop)
+	if pop == 0 {
+		return 0
+	}
+	return applyRange(flux()+getNumericUwpValue(hex.uwp, TL), 1, 0xF)
+}
+
 func getZone(hex hexInfo) zoneType {
 	starport := string(hex.uwp[St])
 	oppressionLevel := getNumericUwpValue(hex.uwp, Gov) + getNumericUwpValue(hex.uwp, Law)
@@ -301,8 +367,8 @@ func getZone(hex hexInfo) zoneType {
 		return redZone
 	case oppressionLevel > 21:
 		return redZone
-	case is(Pop, "0123456")(hex):
-		return amberZone
+	//case is(Pop, "0123456")(hex):
+	//	return amberZone
 	case oppressionLevel > 19:
 		return amberZone
 	}
@@ -429,7 +495,7 @@ func generateSector() tea.Cmd {
 			for hy := 1; hy <= 40; hy++ {
 				locationCode := getLocationCode(hx, hy)
 
-				if coin.Toss() {
+				if rollDecimal(1, 20) < 8 {
 					population := getPopulation()
 					starport := getStarportQuality(population)
 					size := worldSize(dice(2) - 2)
@@ -444,7 +510,16 @@ func generateSector() tea.Cmd {
 					bases := getBases(starport)
 
 					primary := getPrimary()
-					stars := fmt.Sprintf("%s%d %s", primary.class.letter, primary.class.numeral, primary.size)
+					var stars string
+					if primary.size == "D" {
+						if primary.class.letter == "B" {
+							stars = "BD"
+						} else {
+							stars = "D"
+						}
+					} else {
+						stars = fmt.Sprintf("%s%d %s", primary.class.letter, primary.class.numeral, primary.size)
+					}
 					hzVar := getHzVar(primary)
 
 					hex := hexInfo{
@@ -460,13 +535,26 @@ func generateSector() tea.Cmd {
 					hex.zone = getZone(hex)
 					hex.remarks = getTradeCodes(hex)
 
-					populationMultiplier := getPopulationMultiplier(hex)
-					belts := applyMinimum(dice(1)-3, 0)
-					gasGiants := applyMinimum(dice(2)/2-2, 0)
-					hex.PBG = fmt.Sprintf("%d%d%d", populationMultiplier, belts, gasGiants)
+					hex.populationMultiplier = getPopulationMultiplier(hex)
+					hex.belts = applyMinimum(dice(1)-3, 0)
+					hex.gasGiants = applyMinimum(dice(2)/2-2, 0)
 
 					hex.allegiance = "Gc"
-					hex.ix = fmt.Sprintf("{ %d }", getImportanceExtension(hex))
+					hex.importance = getImportanceExtension(hex)
+
+					hex.resources = getResources(hex)
+					hex.labor = getLabor(hex)
+					hex.infrastructure = getInfrastructure(hex)
+					hex.efficiencies = getEfficiencies(hex)
+
+					hex.heterogeneity = getHeterogeneity(hex)
+					hex.acceptance = getAcceptance(hex)
+					hex.strangeness = getStrangeness(hex)
+					hex.symbols = getSymbols(hex)
+
+					hex.nobility = getNobility(hex)
+
+					hex.worlds = getWorlds(hex)
 
 					worlds = append(worlds, hex)
 				}
@@ -514,6 +602,78 @@ func hasBase(required baseLetter) requirement {
 	}
 }
 
+type tradeCode string
+
+const (
+	asteroid  tradeCode = "As"
+	desert              = "De"
+	fluid               = "Fl"
+	garden              = "Ga"
+	hell                = "He"
+	iceCapped           = "Ic"
+	ocean               = "Oc"
+	vacuum              = "Va"
+	water               = "Wa"
+	satellite           = "Sa"
+	locked              = "Lk"
+
+	dieback        = "Di"
+	barren         = "Ba"
+	lowPop         = "Lo"
+	nonIndustrial  = "Ni"
+	preHighPop     = "Ph"
+	highPopulation = "Hi"
+
+	preAg         = "Pa"
+	agricultural  = "Ag"
+	nonAg         = "Na"
+	prisonExile   = "Px"
+	preIndustrial = "Pi"
+	industrial    = "In"
+	poor          = "Po"
+	preRich       = "Pr"
+	rich          = "Ri"
+	lowTech       = "Lt"
+	highTech      = "Ht"
+
+	frozen       = "Fr"
+	hot          = "Ho"
+	cold         = "Co"
+	tropic       = "Tr"
+	tundra       = "Tu"
+	twilightZone = "Tz"
+
+	farming      = "Fa"
+	mining       = "Mi"
+	militaryRule = "Mr"
+	penalColony  = "Pe"
+	reserve      = "Re"
+
+	subsectorCapitol = "Cp"
+	sectorCapitol    = "Cs"
+	capitol          = "Cx"
+	colony           = "Cy"
+
+	forbidden      = "Fo"
+	puzzle         = "Pz"
+	dangerous      = "Da"
+	dataRepository = "Ab"
+	ancientSite    = "An"
+)
+
+func hasTradeCode(code tradeCode) requirement {
+	return func(w hexInfo) bool {
+		hasThese := strings.Split(w.remarks, " ")
+		for i := 0; i < len(hasThese); i++ {
+			next := tradeCode(hasThese[i])
+			if next == code {
+				return true
+			}
+		}
+		return false
+	}
+}
+
 func getImportanceExtension(hex hexInfo) int {
 	value := 0
 
@@ -525,7 +685,6 @@ func getImportanceExtension(hex hexInfo) int {
 	}
 
 	tech := techLevel(getNumericUwpValue(hex.uwp, TL))
-
 	if tech > technology_F {
 		value += 1
 	}
@@ -535,6 +694,18 @@ func getImportanceExtension(hex hexInfo) int {
 	}
 
 	if tech < technology_9 {
+		value -= 1
+	}
+
+	// trade codes
+	for _, c := range []tradeCode{agricultural, highPopulation, industrial, rich} {
+		if hasTradeCode(c)(hex) {
+			value += 1
+		}
+	}
+
+	// population
+	if getNumericUwpValue(hex.uwp, Pop) < 7 {
 		value -= 1
 	}
 
@@ -549,10 +720,155 @@ func getImportanceExtension(hex hexInfo) int {
 	return value
 }
 
+func getResources(hex hexInfo) int {
+	resources := dice(2)
+	if getNumericUwpValue(hex.uwp, TL) > 7 {
+		resources += hex.gasGiants + hex.belts
+	}
+	return applyRange(resources, 0, 0xF)
+}
+
+func getLabor(hex hexInfo) int {
+	return applyMinimum(getNumericUwpValue(hex.uwp, Pop)-1, 0)
+}
+
+func getInfrastructure(hex hexInfo) int {
+	var infrastructure int
+
+	population := getNumericUwpValue(hex.uwp, Pop)
+
+	switch population {
+	case 0:
+		infrastructure = 0
+	case 1, 2, 3:
+		infrastructure = hex.importance
+	case 4, 5, 6:
+		infrastructure = dice(1) + hex.importance
+	default:
+		infrastructure = dice(2) + hex.importance
+	}
+
+	return applyRange(infrastructure, 0, 0xF)
+}
+
+func getEfficiencies(_ hexInfo) int {
+	value := flux()
+	if value == 0 {
+		return 1
+	}
+	return value
+}
+
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+type nobleTitle string
+
+const (
+	knight    nobleTitle = "B"
+	baronet              = "c"
+	baron                = "C"
+	marquis              = "D"
+	viscount             = "e"
+	count                = "E"
+	duke                 = "f"
+	grandDuke            = "F"
+	archduke             = "G"
+)
+
+var any requirement = func(_ hexInfo) bool {
+	return true
+}
+
+func or(r ...requirement) requirement {
+	return func(w hexInfo) bool {
+		for _, next := range r {
+			if next(w) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func and(r ...requirement) requirement {
+	return func(w hexInfo) bool {
+		for _, next := range r {
+			if !next(w) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+func isImportant(min int) requirement {
+	return func(w hexInfo) bool {
+		return w.importance >= min
+	}
+}
+
+func excludeTradeCodes(codes ...tradeCode) requirement {
+	var requirements []requirement
+	for _, next := range codes {
+		hasIt := hasTradeCode(next)
+		requirements = append(requirements, func(h hexInfo) bool {
+			return !hasIt(h)
+		})
+	}
+
+	return and(requirements...)
+}
+
+func includeTradeCodes(codes ...tradeCode) requirement {
+	var requirements []requirement
+	for _, next := range codes {
+		hasIt := hasTradeCode(next)
+		requirements = append(requirements, hasIt)
+	}
+	return or(requirements...)
+}
+
+type nobilityEntry struct {
+	title    nobleTitle
+	requires requirement
+}
+
+var nobilityRequirements = []nobilityEntry{
+	{title: knight, requires: any},
+	{title: baronet, requires: includeTradeCodes(preAg, preRich)},
+	{title: baron, requires: includeTradeCodes(agricultural, rich)},
+	{title: marquis, requires: hasTradeCode(preIndustrial)},
+	{title: viscount, requires: hasTradeCode(preHighPop)},
+	{title: count, requires: includeTradeCodes(industrial, highPopulation)},
+	{title: duke, requires: and(isImportant(4), excludeTradeCodes(subsectorCapitol, capitol, sectorCapitol))},
+	{title: duke, requires: includeTradeCodes(capitol, subsectorCapitol)},
+}
+
+func getNobility(hex hexInfo) []nobleTitle {
+	var nobility []nobleTitle
+
+	for _, next := range nobilityRequirements {
+		if next.requires(hex) {
+			nobility = append(nobility, next.title)
+		}
+	}
+
+	return nobility
+}
+
+func trimBrackets(val string) string {
+	return strings.Trim(val, "[]")
+}
+
+func formatZone(value zoneType) string {
+	if value == greenZone {
+		return ""
+	}
+	return string(value)
 }
 
 func saveSector(sector sector) tea.Cmd {
@@ -564,23 +880,23 @@ func saveSector(sector sector) tea.Cmd {
 		_, headerErr := f.WriteString("Hex\tName\tUWP\tBases\tRemarks\tZone\tPBG\tAllegiance\tStars\t{Ix}\t(Ex)\t[Cx]\tNobility\tW\n")
 		check(headerErr)
 
-		for _, w := range sector.hexes {
+		for _, h := range sector.hexes {
 			_, worldErr := f.WriteString(
 				fmt.Sprintf("%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
-					w.location,
-					w.name,
-					w.uwp,
-					w.bases,
-					w.remarks,
-					w.zone,
-					w.PBG,
-					w.allegiance,
-					w.stars,
-					w.ix,
-					w.ex,
-					w.cx,
-					w.nobility,
-					w.worlds,
+					h.location,
+					h.name,
+					h.uwp,
+					h.bases,
+					h.remarks,
+					formatZone(h.zone),
+					fmt.Sprintf("%d%d%d", h.populationMultiplier, h.belts, h.gasGiants),
+					h.allegiance,
+					h.stars,
+					fmt.Sprintf("{ %d }", h.importance),
+					strings.ToUpper(fmt.Sprintf("(%x%x%x%+d)", h.resources, h.labor, h.infrastructure, h.efficiencies)),
+					strings.ToUpper(fmt.Sprintf("[%x%x%x%x]", h.heterogeneity, h.acceptance, h.strangeness, h.symbols)),
+					strings.Join(strings.Split(strings.Trim(fmt.Sprintf("%v", h.nobility), "[]"), " "), ""),
+					h.worlds,
 				))
 			check(worldErr)
 		}
@@ -603,7 +919,7 @@ func getLocationCode(x int, y int) string {
 	return fmt.Sprintf("%04d", x*100+y)
 }
 
-type requirement func(w hexInfo) bool
+type requirement func(h hexInfo) bool
 
 type uwpElementType int
 
@@ -647,11 +963,11 @@ func is(elementType uwpElementType, allowed string) requirement {
 }
 
 type definition struct {
-	code    string
+	code    tradeCode
 	require []requirement
 }
 
-func define(code string, req ...requirement) definition {
+func define(code tradeCode, req ...requirement) definition {
 	return definition{
 		code:    code,
 		require: req,
@@ -671,7 +987,7 @@ func starport(allowed string) requirement {
 	}
 }
 
-func climate(hzVar int) requirement {
+func hasHzVariance(hzVar int) requirement {
 	return func(w hexInfo) bool {
 		return w.hzVar == hzVar
 	}
@@ -680,11 +996,11 @@ func climate(hzVar int) requirement {
 var tradeCodes = []definition{
 	// Planetary
 	//
-	define("As", is(Siz, "0"), is(Atm, "0"), is(Hyd, "0")),
+	define("As", is(Siz, "0"), is(Hyd, "0")),
 	define("De", is(Atm, "23456789"), is(Hyd, "0")),
 	define("Fl", is(Atm, "ABC"), is(Hyd, "123456789A")),
 	define("Ga", is(Siz, "678"), is(Atm, "568"), is(Hyd, "567")),
-	define("He", is(Siz, "3456789ABC"), is(Atm, "123")),
+	define("He", is(Siz, "3456789ABC"), is(Atm, "2479ABC"), is(Hyd, "012")),
 	define("Ic", is(Atm, "01"), is(Hyd, "123456789A")),
 	define("Oc", is(Siz, "ABCDEF"), is(Atm, "3456789DEF"), is(Hyd, "A")),
 	define("Va", is(Atm, "0")),
@@ -692,7 +1008,7 @@ var tradeCodes = []definition{
 	// Population
 	//
 	define("Di", is(Pop, "0"), is(Gov, "0"), is(Law, "0"), is(TL, "123456789ABCDEF")),
-	define("Ba", is(Pop, "0"), is(Gov, "0"), is(Law, "0"), is(St, "EX")),
+	define("Ba", is(Pop, "0"), is(Gov, "0"), is(Law, "0"), is(St, "EX"), is(TL, "0")),
 	define("Lo", is(Pop, "123")),
 	define("Ni", is(Pop, "456")),
 	define("Ph", is(Pop, "8")),
@@ -707,29 +1023,47 @@ var tradeCodes = []definition{
 	define("In", is(Atm, "012479ABC"), is(Pop, "9ABCDEF")),
 	define("Po", is(Atm, "2345"), is(Hyd, "0123")),
 	define("Pr", is(Atm, "68"), is(Pop, "59")),
-	define("Ri", is(Atm, "68"), is(Pop, "678")),
+	define("Ri", is(Atm, "68"), is(Pop, "678"), is(Gov, "456789")),
+	define(lowTech, is(Pop, "123456789ABCDEF"), is(TL, "12345")),
+	define(highTech, is(TL, "CDEF")),
 	// Climate
 	//
-	define("Fr", is(Siz, "23456789"), is(Hyd, "123456789A"), climate(2)),
-	define("Ho", climate(-1)),
-	define("Co", climate(1)),
-	define("Tr", is(Siz, "6789"), is(Atm, "456789"), is(Hyd, "34567"), climate(-1)),
-	define("Tu", is(Siz, "6789"), is(Atm, "456789"), is(Hyd, "34567"), climate(1)),
+	define("Fr", is(Siz, "23456789"), is(Hyd, "123456789A"), hasHzVariance(2)),
+	define("Ho", hasHzVariance(-1)),
+	define("Co", hasHzVariance(1)),
+	define("Tr", is(Siz, "6789"), is(Atm, "456789"), is(Hyd, "34567"), hasHzVariance(-1)),
+	define("Tu", is(Siz, "6789"), is(Atm, "456789"), is(Hyd, "34567"), hasHzVariance(1)),
+	// Secondary
+	//
+	define("Re", is(Pop, "01234"), is(Gov, "6"), is(Law, "045")),
+	// Political
+	//
+	define("Cy", is(Pop, "01234"), is(Gov, "6"), is(Law, "0123")),
 }
 
 func getTradeCodes(hex hexInfo) string {
-	var codes []string
+	var codes []tradeCode
 
 	for _, def := range tradeCodes {
+		match := true
 		for _, req := range def.require {
 			if !req(hex) {
+				match = false
 				break
 			}
 		}
-		codes = append(codes, def.code)
+		if match {
+			codes = append(codes, def.code)
+		}
 	}
 
-	return strings.Join(codes, " ")
+	if getNumericUwpValue(hex.uwp, Gov) == 6 {
+		if !includeTradeCodes(militaryRule, prisonExile, reserve)(hex) {
+			codes = append(codes, militaryRule)
+		}
+	}
+
+	return strings.Trim(fmt.Sprintf("%v", codes), "[]")
 }
 
 func getBases(starport starportClass) string {
@@ -912,18 +1246,18 @@ func getTechLevel(starport starportClass, size worldSize, atmosphere atmosphereT
 	}
 
 	switch hydrographics {
-	case 0, 9:
+	case 9:
 		dm += 1
-	case 10:
+	case 0xA:
 		dm += 2
 	}
 
 	switch population {
-	case 1, 2, 3, 4, 5, 8:
+	case 1, 2, 3, 4, 5:
 		dm += 1
 	case 9:
 		dm += 2
-	case 10:
+	case 0xA, 0xB, 0xC, 0xD, 0xE, 0xF:
 		dm += 4
 	}
 
@@ -932,7 +1266,7 @@ func getTechLevel(starport starportClass, size worldSize, atmosphere atmosphereT
 		dm += 1
 	case 7:
 		dm += 2
-	case 13, 14:
+	case 0xD:
 		dm -= 2
 	}
 
@@ -1023,13 +1357,27 @@ func flux() int {
 type planetnames struct {
 	names     []string
 	remaining int
+	current   string
 }
 
 func newPlanets() *planetnames {
 	return &planetnames{}
 }
 
+var usedNames = map[string]int{}
+
 func (p *planetnames) Name() string {
+	p.Next()
+	_, exists := usedNames[p.current]
+	if exists {
+		return p.Name()
+	} else {
+		usedNames[p.current] = 1
+		return p.current
+	}
+}
+
+func (p *planetnames) Next() {
 	if p.remaining == 0 {
 		p.names = getMorePlanetNames()
 		p.remaining = len(p.names)
@@ -1038,8 +1386,7 @@ func (p *planetnames) Name() string {
 	result := p.names[0]
 	p.names = p.names[1:]
 	p.remaining--
-
-	return result
+	p.current = result
 }
 
 func getMorePlanetNames() []string {
