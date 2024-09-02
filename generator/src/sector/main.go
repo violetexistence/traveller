@@ -33,6 +33,11 @@ const (
 	worldSize_8
 	worldSize_9
 	worldSize_A
+	worldSize_B
+	worldSize_C
+	worldSize_D
+	worldSize_E
+	worldSize_F
 )
 
 type atmosphereType int
@@ -110,6 +115,8 @@ const (
 	government_B
 	government_C
 	government_D
+	government_E
+	government_F
 )
 
 type lawLevel int
@@ -125,6 +132,12 @@ const (
 	lawlevel_7
 	lawlevel_8
 	lawlevel_9
+	lawlevel_A
+	lawlevel_B
+	lawlevel_C
+	lawlevel_D
+	lawlevel_E
+	lawlevel_F // technically, this can go up to 18 ("J")
 )
 
 type starportClass string
@@ -360,7 +373,15 @@ func getSymbols(hex hexInfo) int {
 
 func getZone(hex hexInfo) zoneType {
 	starport := string(hex.uwp[St])
-	oppressionLevel := getNumericUwpValue(hex.uwp, Gov) + getNumericUwpValue(hex.uwp, Law)
+	trueLawLevel := getNumericUwpValue(hex.uwp, Law)
+	if trueLawLevel == 0xF {
+		roll := rollDecimal(1, 4)
+		switch roll {
+		case 1, 2, 3:
+			trueLawLevel += roll
+		}
+	}
+	oppressionLevel := getNumericUwpValue(hex.uwp, Gov) + trueLawLevel
 
 	switch {
 	case starport == "X":
@@ -500,10 +521,9 @@ func generateSector() tea.Cmd {
 					starport := getStarportQuality(population)
 					size := worldSize(dice(2) - 2)
 					atmosphere := getAtmosphere(size)
-					temperature := getSurfaceTemp(atmosphere)
-					hydrographics := getHydrographics(size, atmosphere, temperature)
+					hydrographics := getHydrographics(size, atmosphere)
 					government := getGovernment(population)
-					law := getLawLevel(population, government)
+					law := getLawLevel(government)
 					tech := getTechLevel(starport, size, atmosphere, hydrographics, population, government)
 					uwp := strings.ToUpper(fmt.Sprintf("%s%x%x%x%x%x%x-%x", starport, size, atmosphere, hydrographics, population, government, law, tech))
 
@@ -1095,6 +1115,14 @@ func getBases(starport starportClass) string {
 	return result
 }
 
+func getSize() worldSize {
+	roll := dice(2) - 2
+	if roll == 10 {
+		return worldSize(dice(1) + 9)
+	}
+	return worldSize(roll)
+}
+
 func getPopulation() populationType {
 	roll := dice(2) - 2
 
@@ -1136,9 +1164,13 @@ func getStarportQuality(population populationType) starportClass {
 }
 
 func getAtmosphere(size worldSize) atmosphereType {
-	roll := dice(2) - 7 + int(size)
+	roll := flux() + int(size)
 
-	return atmosphereType(applyMinimum(roll, 0))
+	if size == worldSize_0 {
+		return atmosphere_0
+	}
+
+	return atmosphereType(applyRange(roll, 0, 0xF))
 }
 
 func getSurfaceTemp(atmosphere atmosphereType) int {
@@ -1169,55 +1201,36 @@ func getSurfaceTemp(atmosphere atmosphereType) int {
 	return dice(2) + dm
 }
 
-func getHydrographics(size worldSize, atmosphere atmosphereType, temperature int) hydrographicType {
+func getHydrographics(size worldSize, atmosphere atmosphereType) hydrographicType {
 	if size < 2 {
 		return 0
 	}
 
 	var dm int
 
-	switch atmosphere {
-	case 0, 1, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF:
+	switch {
+	case atmosphere < 2 || atmosphere > 9:
 		dm -= 4
 	}
 
-	if atmosphere != 0xD {
-		switch {
-		case temperature > 11: // Boiling
-			dm -= 4
-		case temperature > 9: // Hot
-			dm -= 2
-		}
-	}
+	roll := flux() + int(atmosphere) + dm
 
-	roll := dice(2) - 7 + dm
-
-	return hydrographicType(applyMinimum(roll, 0))
+	return hydrographicType(applyRange(roll, 0, 0xA))
 }
 
 func getGovernment(population populationType) governmentType {
-	var result int
+	result := flux() + int(population)
 
-	if population > 0 {
-		result = dice(2) - 7 + int(population)
-	}
-
-	return governmentType(applyRange(result, 0, int(government_D)))
+	return governmentType(applyRange(result, 0, int(government_F)))
 }
 
-func getLawLevel(population populationType, government governmentType) lawLevel {
-	var result int
+func getLawLevel(government governmentType) lawLevel {
+	result := flux() + int(government)
 
-	if population > 0 {
-		result = dice(2) - 7 + int(government)
-	}
-
-	return lawLevel(applyRange(result, 0, 9))
+	return lawLevel(applyRange(result, 0, 0xF))
 }
 
 func getTechLevel(starport starportClass, size worldSize, atmosphere atmosphereType, hydrographics hydrographicType, population populationType, government governmentType) techLevel {
-	roll := dice(1)
-
 	var dm int
 
 	switch starport {
@@ -1270,7 +1283,7 @@ func getTechLevel(starport starportClass, size worldSize, atmosphere atmosphereT
 		dm -= 2
 	}
 
-	result := roll + dm
+	result := dice(1) + dm
 
 	environmentalMin := 0
 	switch atmosphere {

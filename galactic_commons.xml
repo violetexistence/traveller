@@ -17,5 +17,21 @@
 	<Subsector Index="M">Ownsbee</Subsector>
 	<Subsector Index="N">Ariel</Subsector>
 	<Subsector Index="O">Cinder</Subsector>
-	<Subsector Index="P">Farina</Subsector>
+  <Subsector Index="P">Farina</Subsector>
+
+  <Allegiances>
+    <Allegiance Code="Gc">The Galactic Commons</Allegiance>
+    <Allegiance Code="Ic">Independent Colony</Allegiance>
+  </Allegiances>
+
+  <Routes>
+    <Route Start="1204" End="1403" Type="Trade" Allegiance="Gc" Color="#00FF00" />
+    <Route Start="1104" End="1305" Type="Trade" Allegiance="Gc" Color="#00FF00" />
+    <Route Start="1304" End="1306" Type="Trade" Allegiance="Gc" Color="#FF99FF" />
+    <Route Start="1106" End="1305" Type="Trade" Allegiance="Gc" Color="#FF99FF" />
+  </Routes>
+
+  <Stylesheet>
+    route.Trade { color: #00FF00; width: 0.5 }
+  </Stylesheet>
 </Sector>
